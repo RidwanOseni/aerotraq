@@ -9,11 +9,12 @@ from llama_index.core.tools import QueryEngineTool
 from llama_index.core.agent import ReActAgent
 from llama_index.readers.llama_parse import LlamaParse
 from web3 import Web3
-import aioipfs  # Using the new asynchronous IPFS library
-import asyncio  # Import asyncio to run async code
-from eth_hash.auto import keccak  # Importing keccak for hashing
+import aioipfs
+import asyncio
+from eth_hash.auto import keccak
 import sqlite3
 from dotenv import load_dotenv
+from mcp_integration.client import OpenAIPClientIntegration  # Import the MCP client
 
 # Load environment variables
 load_dotenv()
@@ -64,8 +65,7 @@ def serialize_flight_data(flight_data: dict) -> str:
 
 def calculate_hash(serialized_data: str) -> bytes:
     """Calculate keccak256 hash of the serialized data."""
-    # Encode the string to bytes (e.g., UTF-8) and pass it without the 'text' keyword
-    return keccak(serialized_data.encode('utf-8'))  # Corrected call
+    return keccak(serialized_data.encode('utf-8'))
 
 def store_flight_data(data_hash: str, ipfs_cid: str, conn):
     """Store the mapping between data hash and IPFS CID."""
@@ -190,21 +190,48 @@ async def validate_flight_data(flight_data: dict) -> dict:
         compliance_messages.append(f"Error during AI analysis: {str(e)}")
         return {"compliance_messages": compliance_messages, "error": f"AI processing failed: {str(e)}"}
 
-# Make the main processing function asynchronous
 async def validate_and_process_flight_data_async(flight_data: dict) -> dict:
     """Validate flight data and process it for blockchain storage, including async IPFS upload."""
+    mcp_client = None
     try:
         print("Connecting to IPFS...", file=sys.stderr)
         async with aioipfs.AsyncIPFS() as ipfs_client:
             print("IPFS client connected.", file=sys.stderr)
 
-            # Validate flight data
+            # Initialize MCP client
+            print("Initializing MCP client...", file=sys.stderr)
+            mcp_client = OpenAIPClientIntegration()
+
+            # Validate flight data with LlamaIndex
             validation_result = await validate_flight_data(flight_data)
 
             if "error" in validation_result and validation_result["error"].startswith("Regulations file not found"):
                 return validation_result
 
             compliance_messages = validation_result.get("compliance_messages", [])
+
+            # Call MCP validation
+            try:
+                print("Calling MCP validation...", file=sys.stderr)
+                mcp_result = await mcp_client.validate_flight_data(flight_data)
+                print("MCP validation complete.", file=sys.stderr)
+
+                # Process MCP validation results
+                if mcp_result.get("status") == "error":
+                    compliance_messages.append(f"MCP Validation Error: {mcp_result.get('message')}")
+                elif mcp_result.get("status") == "success":
+                    mcp_validation = mcp_result.get("validationResult", {})
+                    if mcp_validation:
+                        # Add MCP validation results to compliance messages
+                        if isinstance(mcp_validation, dict):
+                            for key, value in mcp_validation.items():
+                                compliance_messages.append(f"MCP {key}: {value}")
+                        else:
+                            compliance_messages.append(f"MCP Validation: {mcp_validation}")
+
+            except Exception as mcp_error:
+                print(f"MCP validation error: {mcp_error}", file=sys.stderr)
+                compliance_messages.append(f"MCP Validation Error: {str(mcp_error)}")
 
             # Serialize the flight data
             print("Serializing flight data...", file=sys.stderr)
@@ -241,11 +268,16 @@ async def validate_and_process_flight_data_async(flight_data: dict) -> dict:
                     "error": f"IPFS or Database Processing error: {str(ipfs_e)}"
                 }
 
+            # Prepare final result
             result = {
                 "compliance_messages": compliance_messages,
                 "dataHash": data_hash_hex,
                 "ipfsCid": ipfs_cid,
             }
+
+            # Add MCP validation result if available
+            if mcp_result and mcp_result.get("status") == "success":
+                result["mcpValidationResult"] = mcp_result.get("validationResult")
 
             if "error" in validation_result:
                 result["validation_error"] = validation_result["error"]
@@ -255,6 +287,15 @@ async def validate_and_process_flight_data_async(flight_data: dict) -> dict:
     except Exception as e:
         print(f"Unexpected error in async processing: {e}", file=sys.stderr)
         return {"error": f"Unexpected processing error: {str(e)}"}
+
+    finally:
+        # Ensure MCP client cleanup
+        if mcp_client:
+            try:
+                await mcp_client.cleanup()
+                print("MCP client cleaned up.", file=sys.stderr)
+            except Exception as cleanup_error:
+                print(f"Error during MCP client cleanup: {cleanup_error}", file=sys.stderr)
 
 if __name__ == "__main__":
     print("Script started.", file=sys.stderr)

@@ -1,0 +1,4 @@
+aioipfs==0.7.1
+eth_hash==0.7.1
+llama_index==0.12.37
+web3==7.11.0
