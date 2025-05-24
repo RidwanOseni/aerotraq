@@ -41,3 +41,15 @@ yarn-error.log*
 next-env.d.ts
 
 mcp-evm-server/
+
+# Python virtual environment
+venv/
+
+# Local SQLite DB
+flight_data.db
+
+# Editor-specific
+.cursor/
+
+# External MCP server folder (outside repo)
+../mcp-server/
