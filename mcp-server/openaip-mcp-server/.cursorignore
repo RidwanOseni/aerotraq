@@ -1,0 +1,3 @@
+node_modules/
+dist/
+# No .env here

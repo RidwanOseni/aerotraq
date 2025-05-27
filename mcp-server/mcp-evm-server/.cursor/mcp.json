@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "evm-blockchain": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@mcpdotdirect/evm-mcp-server"
+      ]
+    }
+  }
+}
