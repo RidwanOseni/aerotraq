@@ -1,4 +1,5 @@
 === GENERAL DRONE REGULATIONS ===
+
 1. All drone pilots must be registered with the National Aviation Authority (NAA).
 2. Drone flights must not exceed 400 feet (120 meters) in altitude.
 3. Visual Line of Sight (VLOS) must be maintained at all times during flight.
@@ -7,89 +8,98 @@
 6. All drone flights must be registered with the Drone Flight Management System before takeoff.
 
 === DRONE CATEGORIES ===
+
 - Class A (Under 250g): Toy and hobby drones. No registration required for personal use.
 - Class B (250g - 2kg): Requires pilot registration and basic safety certification.
 - Class C (Above 2kg): Requires commercial drone license and flight insurance.
 
 === DRONE SPECIFICATIONS RULES ===
+
 - Drone Name:
-  - Alphanumeric only.
-  - Must be 3–20 characters (e.g., SkyHawk01, AlphaX7).
+- Alphanumeric only.
+- Must be 3–20 characters (e.g., SkyHawk01, AlphaX7).
 - Drone Model:
-  - Alphanumeric model code.
-  - Example: DJI-M300, Parrot-Anafi, MavicPro2.
+- Alphanumeric model code.
+- Example: DJI-M300, Parrot-Anafi, MavicPro2.
 - Drone Type:
-  - Must be one of the following:
-    - Quadcopter
-    - Hexacopter
-    - Octocopter
-    - Fixed Wing
-    - VTOL
+- Must be one of the following:
+- Quadcopter
+- Hexacopter
+- Octocopter
+- Fixed Wing
+- VTOL
 - Serial Number:
-  - 5 to 15 alphanumeric characters.
+- 5 to 15 alphanumeric characters.
 - Weight (g):
-  - Minimum: 50g
-  - Maximum: 25,000g (25kg)
-  - Above 2kg (2000g) is considered Class C and requires license and insurance.
+- Minimum: 50g
+- Maximum: 25,000g (25kg)
+- Above 2kg (2000g) is considered Class C and requires license and insurance.
 
 === FLIGHT PLAN REQUIREMENTS ===
+
 Each flight plan must include the following:
+
 - Drone make, model, type, and weight.
 - Date, time, and GPS-based or address-based location.
 - Purpose and description of the flight.
 - Maximum altitude and emergency landing plan (optional for AI-generated plans).
 
 === FLIGHT PLAN VALIDATION RULES ===
+
 - Flight Purpose:
-  - Must be one of:
-    - Photography
-    - Survey/Mapping
-    - Delivery
-    - Inspection
-    - Recreational
-    - Emergency Response
+- Must be one of:
+- Photography
+- Survey/Mapping
+- Delivery
+- Inspection
+- Recreational
+- Emergency Response
 - Flight Description:
-  - Must be at least 10 characters long.
-  - Should clearly describe the operation (e.g., "Aerial mapping of coastal farmland").
+- Must be at least 10 characters long.
+- Should clearly describe the operation (e.g., "Aerial mapping of coastal farmland").
 - Flight Date:
-  - Format: YYYY-MM-DD
-  - Cannot be in the past.
+- Format: YYYY-MM-DD
+- Cannot be in the past.
 - Start/End Time:
-  - Format: HH:MM
-  - Must be between 6:00AM and 7:30PM.
-  - Start time must be before end time.
+- Format: HH:MM
+- Must be between 6:00AM and 7:30PM.
+- Start time must be before end time.
 - Location:
-  - Must be a valid address or GPS coordinate.
-  - Must not fall within a No-Fly Zone (see NFZ list).
+- Must be a valid address or GPS coordinate.
+- Must not fall within a No-Fly Zone (see NFZ list).
 - Maximum Altitude (m):
-  - Default limit: 120 meters (400 feet).
-  - Altitude above 120m requires special authorization.
+- Default limit: 120 meters (400 feet).
+- Altitude above 120m requires special authorization.
 
 === NO-FLY ZONES (NFZ) ===
+
 - 5km radius around major airports:
-  - MMA - Murtala Muhammed Airport
-  - LOS - Lagos Airport
+- MMA - Murtala Muhammed Airport
+- LOS - Lagos Airport
 - Government buildings and military zones.
 - National parks and protected wildlife areas.
 - Schools and hospitals (unless with prior authorization).
 - Central Business Districts (CBD) on weekdays between 8:00AM and 6:00PM.
 
 === TIME RESTRICTIONS ===
+
 - Flights only allowed between 6:00AM and 7:30PM local time.
 - Weekend residential zone flights allowed from 8:00AM to 6:00PM.
 - No flights during adverse weather (wind speed > 25km/h, heavy rain, fog).
 
 === INSURANCE & LICENSING RULES ===
+
 - Required for Class C drones and all commercial purposes.
 - Must include:
-  - Insurance ID number.
-  - Proof of commercial drone license.
+- Insurance ID number.
+- Proof of commercial drone license.
 - Insurance should cover:
-  - Third-party liability
-  - Property damage
-  - Personal injury
+- Third-party liability
+- Property damage
+- Personal injury
 
 === AUTO-FLAG CONDITIONS ===
+
 - Weight > 2000g and no insurance/license attached.
 - Max altitude > 120m and no authorization provided.
 - Time of flight outside 6:00AM–7:30PM range.
@@ -97,12 +107,12 @@ Each flight plan must include the following:
 - Empty or invalid fields in required flight plan sections.
 
 === EXAMPLE FLIGHT PLAN ===
+
 Drone Name: SkyScoutX
 Drone Model: DJI-M300
 Drone Type: Octocopter
 Serial Number: M300XDJI12345
 Weight: 3600g
-
 Flight Purpose: Survey/Mapping
 Flight Description: Capturing topographic images of farmlands in Ogun State.
 Flight Date: 2025-04-28
@@ -110,17 +120,18 @@ Start Time: 08:00 AM
 End Time: 09:30 AM
 Location: 6.5244° N, 3.3792° E (Ogun State Farmland)
 Maximum Altitude: 90m
-
 License ID: NAA-COMM-457892
 Insurance ID: DRN-SAFE-COV23482
 
 === PENALTIES ===
+
 - Flying in NFZ without authorization: ₦250,000 fine + 3-month ban.
 - No insurance/license when required: ₦150,000 fine.
 - Night or high-altitude flying without clearance: ₦100,000 fine.
 - Repeated violations may lead to pilot license suspension or permanent ban.
 
 === NOTES ===
+
 - Always check for temporary restrictions or updated bulletins from the NAA before flying.
 - Ensure your drone firmware is up to date and geofencing is enabled where applicable.
 
