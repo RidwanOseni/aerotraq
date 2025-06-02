@@ -1,75 +1,184 @@
+🛸 Aerotraq – Decentralized Drone Flight Registry
+AI Validation + IPFS + On-Chain Record-Keeping
+Laying the foundation for tokenized drone IP assets via Story Protocol.
 
+🚀 Features
+AI-powered Flight Plan Validation
+Uses an OpenAIP-powered MCP (Model Context Protocol) server to check no-fly zones. AI agent (via OpenAI) generates compliance reports.
 
-```
-curl -X POST http://localhost:3000/api/registerFlight \
-  -H "Content-Type: application/json" \
-  -d '{"droneName": "TestDrone"}'
-```
+Deterministic Rule Checks
+Automated checks on date, time, altitude, and drone specs based on regional airspace rules.
 
-```
-curl -X POST http://localhost:3000/api/registerFlight \
-  -H "Content-Type: application/json" \
-  -d '{"droneName": "12345"}'
-```
+Decentralized Data Storage
+Flight plans and telemetry logs are stored on IPFS. Serialized and hashed data ensures integrity.
 
-or return false with
-```
-curl -X POST http://localhost:3000/api/registerFlight \
-  -H "Content-Type: application/json" \
-  -d '{"droneName": "AlphaDrone"}'
-```
+On-Chain Registration (Polygon Amoy)
+Flight data hashes are recorded on-chain using a custom smart contract on the Polygon Amoy testnet (Chain ID: 80002).
 
-```
-curl -X POST http://localhost:3000/api/registerFlight \
-  -H "Content-Type: application/json" \
-  -d '{
-    "droneName": "TestDrone",
-    "droneModel": "DJI Phantom",
-    "serialNumber": "SN123456",
-    "weight": 1.5,
-    "flightPurpose": "Survey",
-    "flightDescription": "Testing flight",
-    "flightDate": "2025-04-22",
-    "startTime": "10:00",
-    "endTime": "10:30",
-    "location": "Berlin",
-    "altitude": 100
-  }'
-```
+DGIP Simulation
+Simulates drone flight telemetry like GPS, altitude, and speed. Produces logs for potential IP use.
 
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+Future IP Tokenization
+Integrates with Story Protocol (WIP) to mint IP assets from drone-generated logs (DGIP), assign licenses, and manage royalties.
 
-## Getting Started
+Cross-Platform Compatible
+Works on Windows, Linux, and GitHub Codespaces.
 
-First, run the development server:
+🛠️ Tech Stack
+Frontend: Next.js (React), Wagmi, Viem
 
-```bash
+Backend:
+
+API Routes (Next.js)
+
+Python (LlamaIndex + custom scripts)
+
+Node.js (OpenAIP MCP server)
+
+Smart Contract: Solidity (DroneFlight)
+
+Deployed to Polygon Amoy at:
+0xbf9da8c38e15105f0ada872ea78512991d6a601c
+
+Chain ID: 80002
+
+Storage: IPFS (via aioipfs in Python)
+
+AI: OpenAI SDK + LlamaIndex
+
+Database: SQLite
+
+Web3 Interaction: Wagmi + Viem (no Hardhat or Ganache)
+
+⚙️ Setup Instructions
+1. Prerequisites
+Python 3.9+
+
+Node.js 18+
+
+Git
+
+Local IPFS daemon (API must be enabled)
+
+uv or pip for Python deps
+
+Metamask or other wallet (for Polygon Amoy)
+
+💡 Note: No Ganache or Hardhat needed — smart contract is already deployed on Polygon Amoy.
+
+2. Clone the Repo
+
+git clone https://github.com/your-org/your-repo.git
+cd your-repo
+
+3. Setup Python Environment
+
+With uv:
+uv venv
+source .venv/bin/activate
+uv add openai mcp[cli] aioipfs eth-hash[pycryptodome] python-dotenv python-dateutil fastapi uvicorn python-multipart
+
+With pip:
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+4. Setup Node.js MCP Server
+
+cd mcp-server/openaip-mcp-server
+npm install
+npm run build
+5. Environment Variables
+Update .env using the example file:
+
+cp .env.example .env
+Update the following fields in .env:
+
+WEB3_PROVIDER_URL=https://rpc-amoy.polygon.technology
+CHAIN_ID=80002
+Set your API keys and paths accordingly.
+
+6. No Smart Contract Deployment Required
+The smart contract is already deployed. Ensure your frontend/backend uses this address:
+
+0xbf9da8c38e15105f0ada872ea78512991d6a601c
+If redeployment is ever needed, use Remix and update the contract address and ABI in your code.
+
+7. Run the App
+Start IPFS daemon
+
+Ensure .env is set up correctly
+
+Start MCP server (if not auto-spawned)
+
+Start the Next.js app:
+
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+Visit: http://localhost:3000
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+🔄 Workflow Summary
+User Input: Flight specs are entered in the frontend.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Validation:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Python script checks flight parameters
 
-## Learn More
+Calls MCP server for no-fly zone validation
 
-To learn more about Next.js, take a look at the following resources:
+AI agent generates compliance report
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+IPFS Storage:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Validated data is serialized + hashed
 
-## Deploy on Vercel
+Uploaded to IPFS (returns CID)
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+On-Chain Hash Registration (Step 1):
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+registerFlight(hash) is called on contract (via Wagmi)
+
+DGIP Logging:
+
+Simulates telemetry
+
+User triggers processing to generate a DGIP log
+
+On-Chain DGIP Link (Step 2):
+
+Calls registerDGIPData(flightHash, dgipHash)
+
+(Planned) Story Protocol IP Tokenization:
+
+Mint IP asset via SDK
+
+Attach license terms (PIL)
+
+Enable future monetization and listing
+
+🌐 Example .env Settings
+
+# Web3
+WEB3_PROVIDER_URL=https://rpc-amoy.polygon.technology
+CHAIN_ID=80002
+
+# IPFS
+IPFS_HOST=127.0.0.1
+IPFS_PORT=5001
+IPFS_PROTOCOL=http
+
+# AI Keys
+OPENAI_API_KEY=your_openai_key
+OPENAIP_API_KEY=your_openaip_key
+
+# SQLite
+DB_PATH=flight_data.db
+
+# Optional
+LOG_LEVEL=INFO
+LOG_FILE=app.log
+PYTHON_EXECUTABLE=python
+
+🤝 Contributions
+Pull requests, issues, and ideas are welcome! Feel free to fork the repo, open an issue, or submit a PR.
+
+Please note: By contributing, you agree that your submissions are offered under the same license, and do not imply ownership or claim over the broader project or its core concept.

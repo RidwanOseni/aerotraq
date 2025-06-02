@@ -235,11 +235,11 @@ export default function FlightDetailsDialog({ form }: FlightDetailsDialogProps) 
                       <Input
                         type="time"
                         {...field}
-                        min="06:00"
-                        max="19:30"
+                        min="09:00"
+                        max="17:30"
                       />
                     </FormControl>
-                    <FormDescription>Between 6:00 AM and 7:30 PM</FormDescription>
+                    <FormDescription>Between 9:00 AM and 5:30 PM</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -254,11 +254,11 @@ export default function FlightDetailsDialog({ form }: FlightDetailsDialogProps) 
                       <Input
                         type="time"
                         {...field}
-                        min="06:00"
-                        max="19:30"
+                        min="09:00"
+                        max="17:30"
                       />
                     </FormControl>
-                    <FormDescription>Between 6:00 AM and 7:30 PM</FormDescription>
+                    <FormDescription>Between 9:00 AM and 5:30 PM</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}

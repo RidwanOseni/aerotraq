@@ -22,7 +22,7 @@ const config = createConfig({
   connectors: [injected()], // Uses injected connector 
   // Define the transports (RPC URLs) for interacting with the chains 
   transports: {
-    [polygonAmoy.id]: http(), // Uses http transport for Polygon Amoy 
+    [polygonAmoy.id]: http("https://polygon-amoy-bor-rpc.publicnode.com"), // Uses http transport for Polygon Amoy 
   },
   // Configure storage to use sessionStorage with SSR fallback 
   // The storage parameter persists Config's State between sessions 

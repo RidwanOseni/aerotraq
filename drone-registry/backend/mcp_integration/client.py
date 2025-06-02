@@ -16,13 +16,19 @@ from openai import OpenAI
 from dotenv import load_dotenv
 load_dotenv()
 
-# Define the path to your OpenAIP MCP server executable
-OPENAIP_SERVER_PATH = "C:/Users/hp/Desktop/DeAI-Bootcamp/Final Project/Team9EncodeDeAIBootcamp2025-UAVguardChain/mcp-server/openaip-mcp-server/build/index.js"
-
-# Retrieve OpenAIP API key - used by the server, but the client passes it via env
+# Retrieve OpenAIP API key and server path from environment variables
+# Using os.getenv() makes it work for everyone and is standard practice.
 openaip_api_key = os.getenv("OPENAIP_API_KEY")
+# Load OpenAIP server path from environment
+openaip_server_path = os.getenv("OPENAIP_SERVER_PATH", "../mcp-server/openaip-mcp-server/build/index.js")
+
+# Ensure required environment variables are set
 if not openaip_api_key:
     print("Error: OPENAIP_API_KEY environment variable is not set.", file=sys.stderr)
+    sys.exit(1)
+
+if not openaip_server_path:
+    print("Error: OPENAIP_SERVER_PATH environment variable is not set.", file=sys.stderr)
     sys.exit(1)
 
 class OpenAIPClientIntegration:
@@ -31,13 +37,15 @@ class OpenAIPClientIntegration:
     Connects to the OpenAIP MCP server to use its tools (e.g., NFZ validation).
     Uses OpenAI API for potential LLM orchestration or interactions.
     """
+
     def __init__(self):
         # Initialize session and client objects
         self.session: Optional[ClientSession] = None
         self.exit_stack = AsyncExitStack()
         self.stdio = None
         self.write = None
-        # Initialize OpenAI client - it automatically reads OPENAI_API_KEY from env
+
+        # Initialize OpenAI client - it automatically reads OPENAI_API_KEY from env [11]
         try:
             self.openai_client = OpenAI()
         except Exception as e:
@@ -49,17 +57,38 @@ class OpenAIPClientIntegration:
         Connects to the OpenAIP MCP server process.
         Launches the server as a subprocess and establishes communication.
         """
+
         if self.session is not None:
             return
 
-        print("Attempting to connect to OpenAIP MCP server...", file=sys.stderr)
+        print(f"Attempting to connect to OpenAIP MCP server at path: {openaip_server_path}", file=sys.stderr)
+
         server_env = os.environ.copy()
         server_env["OPENAIP_API_KEY"] = openaip_api_key
 
+        # Determine the command based on file extension for cross-platform compatibility
+        # This logic mirrors the MCP client setup in other SDKs [12-15]
+        if openaip_server_path.endswith('.js'):
+            command = 'node'
+        elif openaip_server_path.endswith('.py'):
+             # Use 'python3' for Linux/MacOS and 'python' for Windows as suggested in Kotlin SDK [14]
+            command = 'python3' if sys.platform != 'win32' else 'python'
+        elif openaip_server_path.endswith('.jar'):
+             # Include '-jar' argument for Java servers as shown in Kotlin SDK [14]
+            command = 'java'
+            args = ['-jar', openaip_server_path]
+        else:
+            raise ValueError(f"Unsupported server script extension for path: {openaip_server_path}")
+
         # Configure server parameters for stdio_client
+        # args list is constructed differently if command is 'java'
+        if command != 'java':
+             args = [openaip_server_path]
+
+
         server_params = StdioServerParameters(
-            command="node", # The executable command
-            args=[OPENAIP_SERVER_PATH], # The arguments as a list
+            command=command, # The executable command
+            args=args, # The arguments as a list
             env=server_env
         )
 
@@ -77,19 +106,14 @@ class OpenAIPClientIntegration:
             )
             print("Connected to OpenAIP MCP server.", file=sys.stderr)
 
-            # List tools available on the server to confirm connection and capabilities
+            # List tools available on the server to confirm connection and capabilities [12]
             try:
                 response = await self.session.list_tools()
                 print("Available tools on server:", file=sys.stderr)
                 for tool in response.tools:
                     print(f" - {tool.name}: {tool.description}", file=sys.stderr)
             except Exception as e:
-                 # Based on error-message.txt, prompts/list returned Method not found [-32601] [2, 3],
-                 # but tools/list should be standard for servers exposing tools
-                 # The previous error message mentioned Method not found, which might be related
-                 # to attempting to list prompts instead of tools. Assuming tools/list is supported.
                 print(f"Failed to list tools: {e}. The server might not support 'tools/list'.", file=sys.stderr)
-
 
         except Exception as e:
             print(f"Failed to connect to OpenAIP MCP server: {e}", file=sys.stderr)
@@ -98,59 +122,55 @@ class OpenAIPClientIntegration:
             self.write = None
             raise
 
-
     def _transform_flight_data(self, flight_data: dict) -> dict:
         """
         Transform frontend flight data into the format expected by the validate-nfz tool.
-        Handles flightAreaCenter as an object {latitude: number, longitude: number}.
         """
         try:
+            # The flightAreaCenter might come as a string "lat,lng" or an object {lat: ..., lng: ...}
+            # Handle both possibilities from frontend/backend consistency issues
             flight_area_center = flight_data.get('flightAreaCenter')
+            if isinstance(flight_area_center, str):
+                lat_str, lon_str = flight_area_center.split(',')
+                latitude = float(lat_str.strip())
+                longitude = float(lon_str.strip())
+            elif isinstance(flight_area_center, dict):
+                 latitude = float(flight_area_center.get('latitude', 0))
+                 longitude = float(flight_area_center.get('longitude', 0))
+            else:
+                raise ValueError("flightAreaCenter is not a valid string or object.")
 
-            # Check if flightAreaCenter is an object and has latitude/longitude
-            if not isinstance(flight_area_center, dict) or 'latitude' not in flight_area_center or 'longitude' not in flight_area_center:
-                 raise ValueError("flightAreaCenter must be an object with 'latitude' and 'longitude'.")
-
-            latitude = float(flight_area_center['latitude'])
-            longitude = float(flight_area_center['longitude'])
 
             # Get altitude from flightAreaMaxHeight
             altitude = float(flight_data.get('flightAreaMaxHeight', 0))
 
             # Get search radius from flightAreaRadius (convert to km if needed)
-            # Frontend sends radius in meters, MCP tool expects km [4, 5]
-            search_radius_meters = float(flight_data.get('flightAreaRadius', 5000))
-            search_radius_km = search_radius_meters / 1000
+            # The tool expects radius in kilometers [16]
+            # The frontend uses meters [17]
+            radius_meters = float(flight_data.get('flightAreaRadius', 0))
+            search_radius_km = radius_meters / 1000.0 # Convert meters to kilometers
 
-            # Define reference datum mapping
-            # OpenAIP API uses 0 for AGL, 1 for MSL [6, 7]. Defaulting to MSL as per initial thought.
-            REFERENCE_DATUM_MAP = {
-                "AMSL": 1, # Above Mean Sea Level
-                "AGL": 0,  # Above Ground Level
-                "MSL": 1,  # Mean Sea Level (same as AMSL)
-                "WGS84": 1 # Assuming MSL for simplicity unless specified otherwise
-            }
-            # Frontend doesn't specify datum, defaulting to MSL (1)
-            reference_datum = REFERENCE_DATUM_MAP.get("MSL", 1)
+            # The validate-nfz tool schema description doesn't explicitly list referenceDatum [16]
+            # but the example args include it with value 1 [18].
+            # Let's include a default value for now.
+            reference_datum = 1 # Assuming 1 corresponds to MSL (Mean Sea Level) or similar
 
 
-            # Construct the tool arguments
             tool_args = {
                 "coordinates": {
                     "latitude": latitude,
                     "longitude": longitude,
                     "altitude": altitude,
-                    "referenceDatum": reference_datum # Now using numerical value expected by MCP tool
+                    "referenceDatum": reference_datum
                 },
-                "searchRadius": search_radius_km # Pass radius in kilometers
+                "searchRadius": round(search_radius_km, 3) # Round search radius for consistency
             }
 
             return tool_args
 
-        except (ValueError, TypeError) as e:
-            # Catch errors during float conversion or if keys are missing after initial check
+        except (ValueError, AttributeError) as e:
             print(f"Error transforming flight data: {e}", file=sys.stderr)
-            raise ValueError(f"Invalid flight data format or missing required fields: {e}")
+            raise ValueError(f"Invalid flight data format for transformation: {e}")
 
 
     def _extract_serializable_content(self, result: Any) -> Union[str, dict, list]:
@@ -158,42 +178,20 @@ class OpenAIPClientIntegration:
         Extract serializable content from MCP server response.
         Handles CallToolResult and its content types properly.
         """
-        try:
-            if hasattr(result, 'content'):
-                content = result.content
-                # Handle list of content blocks
-                if isinstance(content, list):
-                    return [self._extract_serializable_content(item) for item in content]
-                # Handle TextContent type
-                elif hasattr(content, 'text'):
-                    return content.text
-                # Handle dictionary content
-                elif isinstance(content, dict):
-                     # Recursively process dictionary values
-                    return {k: self._extract_serializable_content(v) for k, v in content.items()}
-                # Handle primitive types
-                elif isinstance(content, (str, int, float, bool)):
-                    return content
-                # Fallback to string representation for other content types
-                else:
-                    return str(content)
-            # Handle direct primitive types
-            elif isinstance(result, (str, int, float, bool)):
-                return result
-            # Handle dictionaries
-            elif isinstance(result, dict):
-                # Recursively process dictionary values
-                return {k: self._extract_serializable_content(v) for k, v in result.items()}
-            # Handle lists
-            elif isinstance(result, list):
-                # Recursively process list items
-                return [self._extract_serializable_content(item) for item in result]
-            # Fallback for any other type
-            else:
-                return str(result)
-        except Exception as e:
-            print(f"Error extracting serializable content: {e}", file=sys.stderr)
-            # Return string representation on error to ensure serializability
+        # Assuming 'result' is a CallToolResult object as per MCP SDK structure [18]
+        if hasattr(result, 'content') and isinstance(result.content, list):
+            # Concatenate text content from list items
+            text_content = []
+            for item in result.content:
+                if hasattr(item, 'type') and item.type == 'text' and hasattr(item, 'text'):
+                    text_content.append(item.text)
+                # Add handling for other content types if necessary in the future
+            return "\n".join(text_content)
+        elif isinstance(result, str):
+            # If the result is already a string (e.g., a simple error message from MCP)
+            return result
+        else:
+             # Fallback for other unexpected result types
             return str(result)
 
 
@@ -201,48 +199,46 @@ class OpenAIPClientIntegration:
         """
         Calls the NFZ validation tool on the connected OpenAIP MCP server.
         """
+
         if self.session is None:
             print("Client not connected to server. Attempting to connect...", file=sys.stderr)
             try:
                 await self.connect_to_server()
             except Exception as e:
                 print(f"Connection attempt failed: {e}", file=sys.stderr)
-                # Return error message if connection fails
-                return {"status": "error", "message": f"Could not connect to MCP server: {e}"}
+                return {"error": f"Could not connect to MCP server: {e}"}
 
         if self.session is None:
-            # This check is needed if connect_to_server fails but doesn't raise
-            return {"status": "error", "message": "Could not connect to MCP server after attempt."}
+            # Return specific error if connection failed after attempt
+            return {"error": "Could not connect to MCP server after attempt."}
+
 
         try:
             # Transform the flight data into the format expected by the tool
             tool_args = self._transform_flight_data(flight_data)
             print(f"Calling tool 'validate-nfz' with args: {tool_args}", file=sys.stderr)
 
-            # Call the validate-nfz tool on the MCP server session
+            # Call the tool asynchronously
             result = await self.session.call_tool("validate-nfz", tool_args)
             print(f"Tool call result received: {result}", file=sys.stderr)
 
             # Extract serializable content from the result
             serializable_result = self._extract_serializable_content(result)
 
-            # Check if the tool itself reported an error
-            if hasattr(result, 'isError') and result.isError:
-                 # If the tool returned an error flag, propagate it
-                 return {"status": "tool_error", "message": serializable_result, "validationResult": serializable_result}
+            # MCP tool status 'error' indicates a tool-specific execution error [18]
+            is_error = getattr(result, 'isError', False) # Assume False if attribute missing
+            if is_error:
+                 # If the tool execution itself returned an error flag
+                 return {"status": "tool_error", "message": serializable_result}
+            else:
+                 # If the tool executed successfully, return the result content
+                 return {"status": "success", "validationResult": serializable_result}
 
-
-            return {"status": "success", "validationResult": serializable_result}
-
-        except ValueError as ve:
-            # Catch specific ValueErrors from data transformation
-            print(f"Data transformation error: {ve}", file=sys.stderr)
-            return {"status": "error", "message": f"Flight data format error: {ve}"}
 
         except Exception as e:
-            # Catch any other exceptions during the tool call
             print(f"Error calling tool 'validate-nfz': {e}", file=sys.stderr)
-            return {"status": "error", "message": f"Error validating flight data with MCP tool: {e}"}
+            # Catch exceptions during the tool call itself (e.g., transport issues, server errors)
+            return {"status": "communication_error", "message": f"Error communicating with MCP server tool: {e}"}
 
 
     async def cleanup(self):
@@ -250,7 +246,7 @@ class OpenAIPClientIntegration:
         Clean up resources, including closing the MCP session and the server process.
         """
         print("Performing MCP client cleanup...", file=sys.stderr)
-        # Use exit_stack to properly close all resources entered with it
+        # The exit_stack will handle closing the session and transport [19]
         await self.exit_stack.aclose()
         self.session = None
         self.stdio = None
@@ -258,53 +254,16 @@ class OpenAIPClientIntegration:
         print("MCP client cleanup complete.", file=sys.stderr)
 
 
+# The __main__ block logic remains the same, handling stdin/stdout for the API route [20]
+# and calling the main async function from the FlightDataValidator class.
+# The OpenAIPClientIntegration is initialized and used within FlightDataValidator.
+
 if __name__ == "__main__":
-    try:
-        # Read all of stdin
-        input_json_string = sys.stdin.read()
-        if not input_json_string:
-            raise ValueError("No input JSON received from stdin.")
+    # The Next.js API route expects the Python script to be run via `spawn` [6]
+    # and communicate via stdin/stdout [6].
+    # The __main__ block should handle reading from stdin, running the async main function,
+    # and printing the final JSON result to stdout.
 
-        # Parse JSON string into a dictionary
-        flight_data_to_validate = json.loads(input_json_string)
-
-        # Run the async main logic
-        async def run_validation():
-            client = OpenAIPClientIntegration()
-            try:
-                # connect_to_server is called internally by validate_flight_data if needed
-                validation_result = await client.validate_flight_data(flight_data_to_validate)
-                # Print the result as JSON to standard output
-                print(json.dumps(validation_result))
-            except Exception as e:
-                # Catch any exceptions not caught inside validate_flight_data
-                error_response = {"status": "application_error", "message": f"Application error during validation: {e}"}
-                print(json.dumps(error_response))
-                print(f"Application error: {e}", file=sys.stderr)
-                # Exit with a non-zero status code to indicate failure
-                sys.exit(1)
-            finally:
-                # Ensure cleanup is always performed
-                await client.cleanup()
-
-        # Run the async function
-        asyncio.run(run_validation())
-
-    except json.JSONDecodeError:
-        # Handle JSON parsing errors from stdin
-        error_response = {"status": "error", "message": "Invalid JSON input received."}
-        print(json.dumps(error_response))
-        print("Error: Invalid JSON input received.", file=sys.stderr)
-        sys.exit(1)
-    except ValueError as ve:
-        # Handle specific ValueErrors (e.g., from data transformation if not caught earlier)
-        error_response = {"status": "error", "message": str(ve)}
-        print(json.dumps(error_response))
-        print(f"Error: {ve}", file=sys.stderr)
-        sys.exit(1)
-    except Exception as general_e:
-        # Handle any other unexpected errors
-        error_response = {"status": "unexpected_error", "message": f"An unexpected error occurred: {general_e}"}
-        print(json.dumps(error_response))
-        print(f"An unexpected error occurred: {general_e}", file=sys.stderr)
-        sys.exit(1)
+    # Async entry point
+    # The FlightDataValidator class now initializes the OpenAIPClientIntegration internally [9]
+    asyncio.run(FlightDataValidator().main())

@@ -83,8 +83,8 @@ Each flight plan must include the following:
 
 === TIME RESTRICTIONS ===
 
-- Flights only allowed between 6:00AM and 7:30PM local time.
-- Weekend residential zone flights allowed from 8:00AM to 6:00PM.
+- Flights only allowed between 9:00AM and 5:30PM local time.
+- Weekend residential zone flights allowed from 9:00AM to 4:00PM.
 - No flights during adverse weather (wind speed > 25km/h, heavy rain, fog).
 
 === INSURANCE & LICENSING RULES ===

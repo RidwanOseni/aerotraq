@@ -28,7 +28,8 @@ async def process_dgip_data(dgip_log_data: list):
     # Calculate Keccak256 hash of the serialized data
     try:
         dgip_data_hash_bytes = keccak(serialized_data_string.encode('utf-8'))
-        dgip_data_hash_hex = dgip_data_hash_bytes.hex()
+        # Prepend "0x" to the hexadecimal string to match the required format
+        dgip_data_hash_hex = "0x" + dgip_data_hash_bytes.hex() # Modified line
     except Exception as e:
         return None, None, f"Error calculating DGIP data hash: {e}"
 
@@ -53,8 +54,9 @@ async def main():
             raise ValueError("No input JSON received.")
 
         dgip_log_data = json.loads(input_json)
+
         if not isinstance(dgip_log_data, list):
-             raise ValueError("Input must be a JSON array of DGIP logs.")
+            raise ValueError("Input must be a JSON array of DGIP logs.")
 
         dgip_data_hash, ipfs_cid, error = await process_dgip_data(dgip_log_data)
 
@@ -63,6 +65,7 @@ async def main():
             "ipfsCid": ipfs_cid,
             "error": error
         }
+
         print(json.dumps(result)) # Output result as JSON to stdout
 
     except json.JSONDecodeError:
@@ -76,7 +79,7 @@ async def main():
     except Exception as general_e:
         sys.stderr.write(f"An unexpected error occurred: {general_e}\n")
         print(json.dumps({"dgipDataHash": None, "ipfsCid": None, "error": f"An unexpected error occurred: {general_e}"}))
-        sys.exit(1)
+
 
 if __name__ == "__main__":
     asyncio.run(main())

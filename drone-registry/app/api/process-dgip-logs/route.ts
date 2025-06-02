@@ -5,7 +5,7 @@ import process from 'process'; // Import process for accessing environment and c
 
 // Determine the correct path to the Python script that processes DGIP logs
 // Based on source analysis, process-dgip.py.txt reads JSON from stdin [1, 2]
-const PYTHON_SCRIPT_PATH = path.join(process.cwd(), 'backend', 'process-dgip.py'); // [1]
+const PYTHON_SCRIPT_PATH = path.join(process.cwd(), 'backend', 'process_dgip.py'); // [1]
 
 // Use environment variable for Python executable, defaulting to 'python'
 const PYTHON_EXECUTABLE = process.env.PYTHON_EXECUTABLE || 'python'; //
