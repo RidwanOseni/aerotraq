@@ -6,32 +6,30 @@ from datetime import datetime, time
 from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass
 
-# Note: LlamaIndex, OpenAI LLM, etc. imports remain as they are used for AI analysis [21]
+# Note: LlamaIndex, OpenAI LLM, etc. imports remain as they are used for AI analysis
 from llama_index.core import VectorStoreIndex, Settings
 from llama_index.llms.openai import OpenAI
 from llama_index.core.tools import QueryEngineTool
 from llama_index.core.agent import ReActAgent
 from llama_index.readers.llama_parse import LlamaParse
 
-# Note: Web3 and aioipfs imports remain as they are used for hashing and IPFS [21]
+# Note: Web3 and aioipfs imports remain as they are used for hashing and IPFS
 from web3 import Web3
 import aioipfs
 import asyncio
 from eth_hash.auto import keccak
 
-# Note: sqlite3 and dotenv imports remain [8]
+# Note: sqlite3 and dotenv imports remain
 import sqlite3
 from dotenv import load_dotenv
 
-# Import the MCP client integration (which now gets config from env vars) [8]
+# Import the MCP client integration (which now gets config from env vars)
 from mcp_integration.client import OpenAIPClientIntegration
 
 # Load environment variables
 load_dotenv()
 
-# Initialize Web3 (used for hashing with keccak) [8]
-# w3 = Web3() # While w3 is imported, keccak is used directly [8]
-# Set the LLM settings [8]
+# Set the LLM settings
 Settings.llm = OpenAI(model="gpt-4o-mini", temperature=0)
 
 @dataclass
@@ -46,6 +44,9 @@ class ValidationState:
     ai_report: Optional[str] = None
     validation_package: Optional[Dict[str, Any]] = None
     is_critically_compliant: bool = False
+    # New fields for Story Protocol details
+    ip_id: Optional[str] = None
+    license_terms_id: Optional[int] = None
 
 class FlightDataValidator:
     def __init__(self):
@@ -66,22 +67,30 @@ class FlightDataValidator:
     def _init_db(self) -> sqlite3.Connection:
         """Initialize SQLite database connection and table."""
         # Define database path using environment variable or default
-        db_path = os.getenv("DB_PATH", "flight_data.db") # Use DB_PATH from .env [22]
+        db_path = os.getenv("DB_PATH", "flight_data.db")
         conn = sqlite3.connect(db_path)
         c = conn.cursor()
-        c.execute('''
-            CREATE TABLE IF NOT EXISTS flight_mappings (
-                data_hash TEXT PRIMARY KEY,
-                ipfs_cid TEXT
-            )
-        ''')
-        conn.commit()
+
+        # Update the schema if needed (e.g., add columns for ip_id and license_terms_id) [Step 4.4, step 4.txt]
+        try:
+            c.execute('''
+                CREATE TABLE IF NOT EXISTS flight_mappings (
+                    data_hash TEXT PRIMARY KEY,
+                    ipfs_cid TEXT,
+                    ip_id TEXT,
+                    license_terms_id INTEGER
+                )
+            ''')
+            conn.commit()
+        except Exception as e:
+            # In a real application, you would use a database migration tool [Step 4.4, step 4.txt]
+            print(f"Warning: Could not ensure flight_mappings table schema: {e}", file=sys.stderr)
+
         return conn
 
     def _reset_state(self) -> None:
         """Reset the validation state."""
         self._state = ValidationState()
-        # _is_processing is handled separately in the main validation function
 
     def _validate_state(self, required_state: str) -> None:
         """Validate that the required state is present."""
@@ -91,34 +100,29 @@ class FlightDataValidator:
     @staticmethod
     def _extract_answer(text: str) -> str:
         """Extract the answer from the AI's response."""
-        # The AI prompt asks for "Answer:" followed by the report [23]
         match = re.search(r"Answer:\s*(.+)", text, re.DOTALL)
         return match.group(1).strip() if match else text.strip()
 
     def _normalize_string(self, value: Any) -> str:
         """Normalize string values."""
-        # Handles None, strings, numbers by converting to string and stripping [23]
         return str(value).strip() if value is not None else ""
 
     def _normalize_float(self, value: Any) -> Optional[float]:
         """Normalize float values."""
         try:
-            # Attempt to convert to float and round, return None if conversion fails [23]
             return round(float(value), 6) if value is not None else None
         except (ValueError, TypeError):
             return None
 
     def _create_validation_package(self, flight_data: Dict[str, Any],
-                                deterministic_results: Dict[str, List[str]],
-                                mcp_results: Dict[str, Any],
-                                ai_report: str) -> Dict[str, Any]:
+                                   deterministic_results: Dict[str, List[str]],
+                                   mcp_results: Dict[str, Any],
+                                   ai_report: str) -> Dict[str, Any]:
         """Create a validation package containing all relevant data."""
-        # Extract lat/lng from the flightAreaCenter object for the package [24]
         flight_area_center_obj = flight_data.get("flightAreaCenter", {})
         normalized_latitude = self._normalize_float(flight_area_center_obj.get("latitude"))
         normalized_longitude = self._normalize_float(flight_area_center_obj.get("longitude"))
 
-        # Structure the package based on requirements, including necessary fields [25]
         package = {
             "flight_data": {
                 "droneName": self._normalize_string(flight_data.get("droneName")),
@@ -132,7 +136,7 @@ class FlightDataValidator:
                 "startTime": self._normalize_string(flight_data.get("startTime")),
                 "endTime": self._normalize_string(flight_data.get("endTime")),
                 "dayNightOperation": self._normalize_string(flight_data.get("dayNightOperation")),
-                "flightAreaCenter": { # Use normalized lat/lng in the package
+                "flightAreaCenter": {
                     "latitude": normalized_latitude,
                     "longitude": normalized_longitude
                 },
@@ -140,7 +144,7 @@ class FlightDataValidator:
                 "flightAreaMaxHeight": self._normalize_float(flight_data.get("flightAreaMaxHeight")),
                 "additionalNotes": self._normalize_string(flight_data.get("additionalNotes"))
             },
-            "validation_results": { # Include validation results in the package [26]
+            "validation_results": {
                 "deterministic_checks": deterministic_results,
                 "mcp_validation": mcp_results,
                 "ai_report": ai_report
@@ -150,47 +154,113 @@ class FlightDataValidator:
 
     def serialize_validation_package(self, validation_package: Dict[str, Any]) -> str:
         """Serialize the validation package in a consistent manner."""
-        # Use sort_keys and separators for deterministic output regardless of Python dict order [27]
-        # Store package and serialized data in state [26]
         self._state.validation_package = validation_package
         self._state.serialized_data = json.dumps(validation_package, sort_keys=True, separators=(',', ':'))
         return self._state.serialized_data
 
     def calculate_hash(self, serialized_data: str) -> bytes:
         """Calculate keccak256 hash of the serialized data."""
-        self._state.data_hash = keccak(serialized_data.encode('utf-8')) # Use keccak from eth_hash [27]
+        self._state.data_hash = keccak(serialized_data.encode('utf-8'))
         return self._state.data_hash
 
-    def store_flight_data(self, data_hash: str, ipfs_cid: str) -> None:
-        """Store the mapping between data hash and IPFS CID in the database."""
+    def store_flight_data(self, data_hash: str, ipfs_cid: str, ip_id: Optional[str] = None, license_terms_id: Optional[int] = None) -> None:
+        """Store the mapping between data hash, IPFS CID, IP ID, and License Terms ID in the database."""
         if not self._db_conn:
             raise RuntimeError("Database connection not initialized")
-        c = self._db_conn.cursor()
-        # Use INSERT OR IGNORE to avoid errors if hash already exists (e.g., duplicate submission) [28]
-        c.execute('INSERT OR IGNORE INTO flight_mappings (data_hash, ipfs_cid) VALUES (?, ?)',
-                (data_hash, ipfs_cid))
-        self._db_conn.commit()
-        self._state.ipfs_cid = ipfs_cid # Store CID in state after successful DB operation [28]
 
+        c = self._db_conn.cursor()
+
+        # Update the schema if needed (e.g., add columns for ip_id and license_terms_id) [Step 4.4, step 4.txt]
+        try:
+            c.execute('''
+                CREATE TABLE IF NOT EXISTS flight_mappings (
+                    data_hash TEXT PRIMARY KEY,
+                    ipfs_cid TEXT,
+                    ip_id TEXT,
+                    license_terms_id INTEGER
+                )
+            ''')
+            self._db_conn.commit()
+        except Exception as e:
+            # In a real application, handle this more robustly
+            print(f"Warning: Could not ensure flight_mappings table schema: {e}", file=sys.stderr)
+
+        # Use INSERT OR REPLACE to update the record if the data_hash already exists,
+        # or INSERT OR IGNORE if you only want to store the first registration
+        # For this step's purpose (adding IP/License later), REPLACE is better [Step 4.4, step 4.txt]
+        c.execute('''
+            INSERT OR REPLACE INTO flight_mappings (data_hash, ipfs_cid, ip_id, license_terms_id)
+            VALUES (?, ?, ?, ?)
+        ''', (data_hash, ipfs_cid, ip_id, license_terms_id))
+        self._db_conn.commit()
+        print(f"Mapping stored/updated for hash {data_hash}: ipfs_cid={ipfs_cid}, ip_id={ip_id}, license_terms_id={license_terms_id}", file=sys.stderr)
+
+        # Update state to include IP ID and License Terms ID if provided [Step 4.4, step 4.txt]
+        if ip_id:
+            self._state.ip_id = ip_id
+        if license_terms_id is not None:
+            self._state.license_terms_id = license_terms_id
+
+    def get_flight_data_by_hash(self, data_hash: str) -> Optional[Dict[str, Any]]:
+        """Retrieve flight data including Story Protocol details by data hash."""
+        if not self._db_conn:
+            raise RuntimeError("Database connection not initialized")
+
+        c = self._db_conn.cursor()
+        c.execute('SELECT data_hash, ipfs_cid, ip_id, license_terms_id FROM flight_mappings WHERE data_hash = ?', (data_hash,))
+        row = c.fetchone()
+
+        if row:
+            # Adjusted indexing as per the schema definition [Step 4.4, step 4.txt]
+            return {
+                "dataHash": row,
+                "ipfsCid": row[1],
+                "ipId": row[2],
+                "licenseTermsId": row[3],
+            }
+        return None
+
+    async def update_story_protocol_details(self, data_hash: str, ip_id: str, license_terms_id: int):
+        """Update a flight record with Story Protocol IP ID and License Terms ID."""
+        print(f"Attempting to update flight record {data_hash} with IP ID {ip_id} and License Terms ID {license_terms_id}", file=sys.stderr)
+
+        # Ensure DB connection is active for this operation
+        if not self._db_conn:
+            self._db_conn = self._init_db()
+
+        c = self._db_conn.cursor()
+
+        # First, check if the flight hash exists
+        c.execute('SELECT data_hash FROM flight_mappings WHERE data_hash = ?', (data_hash,))
+        if c.fetchone() is None:
+            raise ValueError(f"Flight hash {data_hash} not found in database.")
+
+        # Update the record
+        c.execute('''
+            UPDATE flight_mappings
+            SET ip_id = ?, license_terms_id = ?
+            WHERE data_hash = ?
+        ''', (ip_id, license_terms_id, data_hash))
+        self._db_conn.commit()
+
+        print(f"Successfully updated flight record {data_hash} with Story Protocol details.", file=sys.stderr)
+        return {"status": "success", "message": "Story Protocol details updated successfully."}
 
     async def perform_deterministic_checks(self) -> Dict[str, List[str]]:
         """Perform basic deterministic checks on flight data."""
-        self._validate_state('flight_data') # Ensure flight_data is loaded into state [29]
+        self._validate_state('flight_data')
         check_results = {
             "flight_date": [],
             "flight_times": [],
             "drone_weight": []
         }
-        flight_data = self._state.flight_data # Get data from state [29]
+        flight_data = self._state.flight_data
 
         # Check flight date
         flight_date_str = flight_data.get("flightDate")
         if flight_date_str:
             try:
-                # Parse date as date object for comparison
-                # Include 'T00:00:00' to avoid timezone issues with date parsing alone [29]
                 flight_date = datetime.strptime(flight_date_str + 'T00:00:00', "%Y-%m-%dT%H:%M:%S").date()
-                # Check if date is in the future
                 if flight_date < datetime.now().date():
                     check_results["flight_date"].append(
                         f"Flight date {flight_date_str} is in the past.")
@@ -203,30 +273,25 @@ class FlightDataValidator:
         # Check flight times
         start_time_str = flight_data.get("startTime")
         end_time_str = flight_data.get("endTime")
-        # Schema specifies time format HH:MM and range 09:00 to 17:30 [30, 31]
+
         operational_start_time = time(9, 0)
-        operational_end_time = time(17, 30) # 5:30 PM
+        operational_end_time = time(17, 30)
 
         if start_time_str and end_time_str:
             try:
                 start_time_obj = datetime.strptime(start_time_str, "%H:%M").time()
                 end_time_obj = datetime.strptime(end_time_str, "%H:%M").time()
 
-                # Check if end time is after start time (already done by frontend schema refine [32])
-                # Adding here for server-side robustness
                 if end_time_obj <= start_time_obj:
-                     check_results["flight_times"].append(
-                         f"End time {end_time_str} must be after start time {start_time_str}.")
+                    check_results["flight_times"].append(
+                        f"End time {end_time_str} must be after start time {start_time_str}.")
 
-                # Check if times are within operational hours [30, 31]
                 isStartTimeValid = operational_start_time <= start_time_obj <= operational_end_time
                 isEndTimeValid = operational_start_time <= end_time_obj <= operational_end_time
 
-                # The flight must be entirely within the operational hours. [31]
                 if not isStartTimeValid or not isEndTimeValid:
                     check_results["flight_times"].append(
                         f"Flight times ({start_time_str} - {end_time_str}) must be between 09:00 and 17:30.")
-
             except ValueError:
                 check_results["flight_times"].append(
                     f"Invalid time format. Expected HH:MM for both start and end times.")
@@ -237,9 +302,6 @@ class FlightDataValidator:
                 check_results["flight_times"].append("End time is missing.")
 
         # Check drone weight
-        # Schema defines weight as min 50g, max 25000g [33]
-        # Frontend description mentions max 25kg (25000g) without special auth [17]
-        # Let's stick to the 25000g limit as per schema for critical check
         weight = flight_data.get("weight")
         if weight is not None:
             try:
@@ -247,7 +309,7 @@ class FlightDataValidator:
                 if weight_grams > 25000:
                     check_results["drone_weight"].append(
                         f"Drone weight ({weight_grams}g) exceeds 25000g (25kg). Additional regulations may apply.")
-                elif weight_grams < 50: # Also check minimum as per schema [33]
+                elif weight_grams < 50:
                     check_results["drone_weight"].append(
                         f"Drone weight ({weight_grams}g) is below minimum allowed (50g).")
             except ValueError:
@@ -263,12 +325,11 @@ class FlightDataValidator:
         """Main validation and processing function."""
         if self._is_processing:
             raise RuntimeError("Another validation process is already in progress")
-
         self._is_processing = True
         mcp_client = None
         ipfs_client = None
-        compliance_messages: List[str] = [] # Initialize compliance messages list
-        has_critical_errors = False # Assume no critical errors initially
+        compliance_messages: List[str] = []
+        has_critical_errors = False
 
         try:
             # 1. Initialize state
@@ -277,59 +338,45 @@ class FlightDataValidator:
 
             # 2. Initialize MCP client
             print("Initializing MCP client...", file=sys.stderr)
-            mcp_client = OpenAIPClientIntegration() # MCP client gets config from env vars
+            mcp_client = OpenAIPClientIntegration()
 
             # 3. Perform deterministic checks
             print("Performing deterministic checks...", file=sys.stderr)
             deterministic_results = await self.perform_deterministic_checks()
-            # Check if deterministic checks contain any errors (considered potentially critical by backend)
             has_deterministic_errors = any(len(messages) > 0 for messages in deterministic_results.values())
 
             # 4. Call MCP validation
             print("Calling MCP validation...", file=sys.stderr)
-            # Default MCP result in case of failure or skipping
             mcp_result = {"status": "skipped", "message": "MCP validation skipped or failed to initialize."}
-            has_mcp_errors = True # Default assumes failure or skip
+            has_mcp_errors = True
 
-            # MCP validation requires flightAreaCenter to be non-empty and parsable into lat/lng floats [34]
             flight_area_center = flight_data.get('flightAreaCenter')
-            # Basic check for center data presence before attempting MCP call
             if flight_area_center and ( (isinstance(flight_area_center, str) and ',' in flight_area_center) or isinstance(flight_area_center, dict) ):
-                 try:
-                     # validate_flight_data now handles the transformation internally
-                     mcp_result = await mcp_client.validate_flight_data(flight_data)
-                     print("MCP validation complete.", file=sys.stderr)
-                     self._state.mcp_results = mcp_result
-
-                     # MCP status "success" means no issues found by the tool [18, 35]
-                     # Status could be "tool_error" or "communication_error" on failure [36]
-                     has_mcp_errors = mcp_result.get("status") != "success"
-
-                 except Exception as mcp_call_error:
-                     print(f"MCP tool call or communication error: {mcp_call_error}", file=sys.stderr)
-                     mcp_result = {"status": "communication_error", "message": f"MCP tool call or communication error: {str(mcp_call_error)}"}
-                     self._state.mcp_results = mcp_result
-                     has_mcp_errors = True # Any error during the call is critical
-
+                try:
+                    mcp_result = await mcp_client.validate_flight_data(flight_data)
+                    print("MCP validation complete.", file=sys.stderr)
+                    self._state.mcp_results = mcp_result
+                    has_mcp_errors = mcp_result.get("status") != "success"
+                except Exception as mcp_call_error:
+                    print(f"MCP tool call or communication error: {mcp_call_error}", file=sys.stderr)
+                    mcp_result = {"status": "communication_error", "message": f"MCP tool call or communication error: {str(mcp_call_error)}"}
+                    self._state.mcp_results = mcp_result
+                    has_mcp_errors = True
             else:
                 print("MCP validation skipped: flightAreaCenter is missing or not in expected string/object format.", file=sys.stderr)
                 mcp_result = {"status": "skipped", "message": "flightAreaCenter is missing or not in expected string/object format. Cannot perform NFZ validation."}
                 self._state.mcp_results = mcp_result
-                has_mcp_errors = True # Missing/invalid center is considered critical for NFZ validation
+                has_mcp_errors = True
 
-            # Determine overall critical errors based on deterministic and MCP results
-            # If deterministic checks found errors *or* MCP validation failed/skipped/errored
             has_critical_errors = has_deterministic_errors or has_mcp_errors
-            self._state.is_critically_compliant = not has_critical_errors # Set the new state field [37]
+            self._state.is_critically_compliant = not has_critical_errors
 
-            # 5. Prepare AI prompt with all information (regardless of errors for AI analysis) [38]
-            # The AI agent is intended to synthesize and report, not necessarily be the critical gate.
-            # We run it even if there are deterministic/MCP errors to provide a comprehensive report.
-
+            # 5. Prepare AI prompt with all information
             comprehensive_prompt = f"""
 Given the following flight details, deterministic check results, and No-Fly Zone validation findings,
 synthesize a comprehensive report detailing all potential compliance issues.
 Present the findings as a single list of bullet points.
+
 If no critical issues are found based on the deterministic and NFZ validation information, state that the flight appears compliant.
 
 Flight Details:
@@ -353,14 +400,10 @@ Structure your response with 'Answer:' followed by the comprehensive report.
 
             # 6. Call AI agent
             print("Initializing AI agent...", file=sys.stderr)
-            # Default AI report in case of failure
             ai_report = f"Error during AI analysis: AI agent could not be initialized or failed."
             try:
-                # Load regulations for AI analysis [39]
                 regulations_path = os.path.join(os.path.dirname(__file__), "regulations.txt")
                 print(f"Loading regulations from: {regulations_path}", file=sys.stderr)
-
-                # LlamaParse needs to be awaited.
                 documents = await LlamaParse(result_type="text", verbose=False).aload_data(regulations_path)
                 index = VectorStoreIndex.from_documents(documents)
                 query_engine = index.as_query_engine()
@@ -369,103 +412,83 @@ Structure your response with 'Answer:' followed by the comprehensive report.
                     name="RegulationValidator",
                     description="A tool for validating flight details against the regulations.",
                 )
-                # Use agent.achat for async interaction [40]
                 agent = ReActAgent.from_tools([query_tool], verbose=False)
                 print("Sending comprehensive query to AI...", file=sys.stderr)
-                response = await agent.achat(comprehensive_prompt) # Use achat for async [40]
+                response = await agent.achat(comprehensive_prompt)
                 print("AI response received.", file=sys.stderr)
-
-                # 7. Process AI response [37]
                 ai_report = self._extract_answer(str(response))
                 self._state.ai_report = ai_report
-
             except Exception as ai_error:
                 print(f"AI analysis error: {ai_error}", file=sys.stderr)
                 self._state.ai_report = f"Error during AI analysis: {str(ai_error)}"
 
-
-            # 8. Prepare compliance messages for the frontend [41]
-            # Always include the AI report if available, plus any specific errors from validators
-            compliance_messages = [self._state.ai_report] # Start with AI report
-
-            # Add specific error messages from validators if critical errors were detected [41]
+            # 7. Prepare compliance messages for the frontend
+            compliance_messages = [self._state.ai_report]
             if has_critical_errors:
                 if has_deterministic_errors:
-                    # Include specific messages from deterministic checks
                     for check_type, messages in deterministic_results.items():
                         if messages:
                             compliance_messages.append(f"Deterministic Check Issue ({check_type}): " + "; ".join(messages))
-
-                # Append the specific MCP message regardless of whether the call was attempted,
-                # as the message itself indicates the reason for failure/skip. [42]
-                # Use the message field from the mcp_result dictionary
                 mcp_status = mcp_result.get('status', 'unknown')
                 mcp_msg = mcp_result.get('message', 'Unknown MCP error details.')
-                if mcp_status != 'success': # Only add explicit MCP message if it wasn't successful
+                if mcp_status != 'success':
                     compliance_messages.append(f"MCP Validation Status: {mcp_status}. Details: {mcp_msg}")
 
-            # 9. Only proceed with serialization, hashing, IPFS, and DB if no critical errors [42]
+            # 8. Only proceed with serialization, hashing, IPFS, and DB if no critical errors
             if self._state.is_critically_compliant:
                 print("No critical errors found. Proceeding with serialization and storage.", file=sys.stderr)
 
-                # 10. Gather data into a validation package structure [42]
+                # 9. Gather data into a validation package structure
                 validation_package = self._create_validation_package(
                     self._state.flight_data, deterministic_results, mcp_result, self._state.ai_report
                 )
 
-                # 11. Serialize the combined data [43]
+                # 10. Serialize the combined data
                 print("Serializing validation package...", file=sys.stderr)
                 serialized_data = self.serialize_validation_package(validation_package)
                 print("Data serialized.", file=sys.stderr)
 
-                # 12. Calculate hash [43]
-                print("Validation package content (dict):", json.dumps(self._state.validation_package, indent=2), file=sys.stderr) # Added logging here
-                print("Serialized data content (string):", self._state.serialized_data, file=sys.stderr) # Added logging here
+                # 11. Calculate hash
+                print("Validation package content (dict):", json.dumps(self._state.validation_package, indent=2), file=sys.stderr)
+                print("Serialized data content (string):", self._state.serialized_data, file=sys.stderr)
                 print("Calculating hash...", file=sys.stderr)
                 data_hash = self.calculate_hash(serialized_data)
-                # Format hash as 0x prefixed hex string [44]
                 data_hash_hex = "0x" + data_hash.hex()
                 print(f"Data hash calculated: {data_hash_hex}", file=sys.stderr)
 
-                # 13. Upload to IPFS [45]
+                # 12. Upload to IPFS
                 print("Uploading data to IPFS...", file=sys.stderr)
                 ipfs_cid = None
                 try:
-                    # Ensure IPFS client is used within an async context [45]
                     ipfs_client = aioipfs.AsyncIPFS()
                     async with ipfs_client:
                         ipfs_add_result = await ipfs_client.core.add_bytes(serialized_data.encode('utf-8'))
                         ipfs_cid = ipfs_add_result['Hash']
-                        print(f"Data uploaded to IPFS with CID: {ipfs_cid}", file=sys.stderr)
-                        self._state.ipfs_cid = ipfs_cid # Store CID in state only on success [46]
-
+                    print(f"Data uploaded to IPFS with CID: {ipfs_cid}", file=sys.stderr)
+                    self._state.ipfs_cid = ipfs_cid
                 except Exception as ipfs_error:
-                    # It's okay to proceed if IPFS upload fails for the MVP, but report the warning [46]
                     sys.stderr.write(f"Warning: Failed to upload data to IPFS: {ipfs_error}\n")
                     print(f"Warning: Failed to upload data to IPFS: {ipfs_error}", file=sys.stderr)
-                    # ipfs_cid remains None
+                    ipfs_cid = None
 
-                # 14. Store mapping in database [47]
-                # Store hash regardless of IPFS success, as hash represents content identity [47]
-                # Only attempt database storage if dataHash was successfully calculated
+                # 13. Store mapping in database
                 if data_hash_hex:
-                     print("Storing mapping in database...", file=sys.stderr)
-                     try:
-                         self.store_flight_data(data_hash_hex, ipfs_cid if ipfs_cid else "UPLOAD_FAILED") # Store placeholder CID if upload failed [47]
-                         print("Mapping stored.", file=sys.stderr)
-                     except Exception as db_error:
-                         sys.stderr.write(f"Error storing mapping in database: {db_error}\n")
-                         print(f"Error storing mapping in database: {db_error}", file=sys.stderr)
-                         # Database error is potentially critical, but might allow returning hash/cid if generated
+                    print("Storing mapping in database...", file=sys.stderr)
+                    try:
+                        # Call the modified store_flight_data with None for ip_id and license_terms_id initially
+                        self.store_flight_data(data_hash_hex, ipfs_cid if ipfs_cid else "UPLOAD_FAILED", None, None)
+                        print("Mapping stored.", file=sys.stderr)
+                    except Exception as db_error:
+                        sys.stderr.write(f"Error storing mapping in database: {db_error}\n")
+                        print(f"Error storing mapping in database: {db_error}", file=sys.stderr)
 
-
-                # 15. Prepare final success result [48]
+                # 14. Prepare final success result
                 result = {
                     "compliance_messages": compliance_messages,
-                    "dataHash": data_hash_hex, # Include hash if generated
-                    "ipfsCid": ipfs_cid, # Include CID (might be None)
-                    "is_critically_compliant": self._state.is_critically_compliant, # This will be True
-                    "raw_validation_data": { # Include raw data for debugging
+                    "dataHash": data_hash_hex,
+                    "ipfsCid": ipfs_cid,
+                    "is_critically_compliant": self._state.is_critically_compliant,
+                    "raw_validation_data": {
                         "deterministic_checks": deterministic_results,
                         "mcp_validation": mcp_result
                     }
@@ -473,15 +496,14 @@ Structure your response with 'Answer:' followed by the comprehensive report.
                 return result
 
             else: # has_critical_errors is True
-                print("Critical errors found. Skipping serialization, hashing, IPFS upload, and DB storage.", file=sys.stderr) [48]
-                # Return results *without* hash/cid indicating failure [49]
+                print("Critical errors found. Skipping serialization, hashing, IPFS upload, and DB storage.", file=sys.stderr)
                 result = {
-                    "compliance_messages": compliance_messages, # Includes AI report and specific errors
-                    "dataHash": None, # Indicate no data hash generated due to errors [49]
-                    "ipfsCid": None, # Indicate no IPFS CID generated due to errors [49]
-                    "is_critically_compliant": self._state.is_critically_compliant, # This will be False [49]
-                    "error": "Validation reported critical issues. Data not stored on IPFS or DB.", # Top-level error for frontend [49]
-                    "raw_validation_data": { # Include raw data for debugging [50]
+                    "compliance_messages": compliance_messages,
+                    "dataHash": None,
+                    "ipfsCid": None,
+                    "is_critically_compliant": self._state.is_critically_compliant,
+                    "error": "Validation reported critical issues. Data not stored on IPFS or DB.",
+                    "raw_validation_data": {
                         "deterministic_checks": deterministic_results,
                         "mcp_validation": mcp_result
                     }
@@ -489,78 +511,88 @@ Structure your response with 'Answer:' followed by the comprehensive report.
                 return result
 
         except Exception as e:
-            # Handle any unexpected exceptions during the process [50]
             print(f"Unexpected error in async processing: {e}", file=sys.stderr)
-            # Ensure compliance_messages is defined even if an early error occurred [50]
             final_compliance_messages = [f"Unexpected processing error: {str(e)}"]
             if 'compliance_messages' in locals() and compliance_messages:
                 final_compliance_messages.extend(compliance_messages)
-
             return {
                 "compliance_messages": final_compliance_messages,
                 "error": f"Unexpected processing error: {str(e)}",
-                "dataHash": None, # Indicate no data hash generated [51]
-                "ipfsCid": None, # Indicate no IPFS CID generated [51]
-                "is_critically_compliant": False, # Unexpected errors mean not compliant [51]
-                # raw_validation_data might not be available on unexpected early errors [51]
+                "dataHash": None,
+                "ipfsCid": None,
+                "is_critically_compliant": False,
             }
-
         finally:
             self._is_processing = False
-            # Clean up MCP client if it was initialized [51]
             if mcp_client:
                 try:
                     await mcp_client.cleanup()
-                    print("MCP client cleaned up.", file=sys.stderr) # [52]
+                    print("MCP client cleaned up.", file=sys.stderr)
                 except Exception as cleanup_error:
                     print(f"Error during MCP client cleanup: {cleanup_error}", file=sys.stderr)
-            # IPFS client is handled by the async with block if it was initialized within the try block [52]
 
     async def main(self):
-        """Main entry point for the script."""
-        print("Script started.", file=sys.stderr) # [52]
+        """Main entry point for the script. Handles different actions based on input."""
+        print("Script started.", file=sys.stderr)
+
+        # Initialize _db_conn at the top level of main to ensure it's closed in finally
+        self._db_conn = None
+
         try:
             input_json = sys.stdin.read()
-            print(f"Received input JSON: {input_json}", file=sys.stderr) # [52]
+            print(f"Received input JSON: {input_json}", file=sys.stderr)
+
             if not input_json:
-                raise ValueError("No input JSON received.") # [52]
+                raise ValueError("No input JSON received.")
 
-            flight_data = json.loads(input_json)
-            print("Input JSON parsed successfully.", file=sys.stderr) # [53]
+            parsed_input = json.loads(input_json)
 
-            # Use the context manager for the validator to ensure database connection is closed [53]
-            # The main async logic is now within the context manager [53]
-            with FlightDataValidator() as validator:
-                result = await validator.validate_and_process_flight_data(flight_data)
+            # Check if the input specifies a specific action [Step 4.5, step 4.txt]
+            action = parsed_input.get("action")
 
-            # Output the result as JSON to stdout [53]
-            print(json.dumps(result))
-            print("Script finished successfully.", file=sys.stderr) # [53]
+            if action == "update_story_protocol_details":
+                # Handle updating story protocol details [Step 4.5, step 4.txt]
+                data_hash = parsed_input.get("dataHash")
+                ip_id = parsed_input.get("ipId")
+                license_terms_id = parsed_input.get("licenseTermsId")
 
-        except json.JSONDecodeError:
-            error_response = {"status": "error", "message": "Invalid JSON input received from stdin.", "dataHash": None, "ipfsCid": None, "is_critically_compliant": False} # [53]
-            # Output error as JSON to stderr and stdout for route handler to catch [54]
+                if not data_hash or not ip_id or license_terms_id is None:
+                    raise ValueError("Missing required parameters for update_story_protocol_details action.")
+
+                # Ensure database connection is initialized for this action [Step 4.5, step 4.txt]
+                self._db_conn = self._init_db()
+                result = await self.update_story_protocol_details(data_hash, ip_id, license_terms_id)
+                print(json.dumps(result)) # Output result to stdout
+
+            else:
+                # Assume standard validation/processing flow if no action specified [Step 4.5, step 4.txt]
+                flight_data = parsed_input # Assume the input is flight data for validation
+
+                # Ensure database connection is initialized for the validation flow as well
+                self._db_conn = self._init_db()
+                result = await self.validate_and_process_flight_data(flight_data)
+                print(json.dumps(result)) # The process method already prints its result to stdout
+
+            print("Script finished successfully.", file=sys.stderr)
+
+        except (json.JSONDecodeError, ValueError) as e:
+            error_response = {"status": "error", "message": f"Input processing error: {str(e)}", "dataHash": None, "ipfsCid": None, "is_critically_compliant": False}
             print(json.dumps(error_response), file=sys.stderr)
-            print(json.dumps(error_response)) # Also print to stdout for the route handler [54]
-            sys.exit(1) # [54]
-
+            print(json.dumps(error_response))
+            sys.exit(1)
         except Exception as main_error:
-            # Catch any other exceptions that occur before or after the validator context [54]
-            error_response = {"status": "error", "message": f"Application error: {str(main_error)}", "dataHash": None, "ipfsCid": None, "is_critically_compliant": False} # [54]
-            # Output error as JSON to stderr and stdout for route handler to catch [20]
+            print(f"Application error: {str(main_error)}", file=sys.stderr)
+            error_response = {"status": "error", "message": f"Application error: {str(main_error)}", "dataHash": None, "ipfsCid": None, "is_critically_compliant": False}
             print(json.dumps(error_response), file=sys.stderr)
-            print(json.dumps(error_response)) # Also print to stdout for the route handler [20]
-            sys.exit(1) # [20]
+            print(json.dumps(error_response))
+            sys.exit(1)
+        finally:
+            # Clean up database connection if it was initialized in main
+            if self._db_conn:
+                self._db_conn.close()
+                self._db_conn = None
+            # MCP client cleanup is handled within validate_and_process_flight_data
 
-
-# The __main__ block is present below, handling the asyncio run [20]
+# The __main__ block remains the same, handling the asyncio run
 if __name__ == "__main__":
-    # The Next.js API route expects the Python script to be run via `spawn` [6]
-    # and communicate via stdin/stdout [6].
-    # The __main__ block should handle reading from stdin, running the async main function,
-    # and printing the final JSON result to stdout. [20]
-
-    # Async entry point
-    # The FlightDataValidator class now initializes the OpenAIPClientIntegration internally [9]
-    # This structure is consistent with the original source [20]
     asyncio.run(FlightDataValidator().main())

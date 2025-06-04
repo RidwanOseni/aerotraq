@@ -1,32 +1,22 @@
 'use client';
 
 import { useEffect, useState } from "react";
-
 import { useForm } from 'react-hook-form';
-
 import { zodResolver } from '@hookform/resolvers/zod';
-
 import { toast } from "sonner";
-
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form } from '@/components/ui/form';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ComplianceSuggestions } from "@/components/compliance-suggestions";
-
-import { useAccount, useWriteContract, useConfig } from "wagmi"; // Import useConfig
-
+import { useAccount, useWriteContract, useConfig } from "wagmi";
 import { Loader2 } from 'lucide-react';
-
 import { isHex, hexToBytes } from 'viem';
-
 import { getPublicClient } from 'wagmi/actions';
 
 // Import the FlightDetailsDialog component containing the form fields
 import FlightDetailsDialog from "@/components/flight-details-dialog";
-
 import { DgipSimulationDisplay } from "@/components/dgip-simulation-display";
-
 import { flightFormSchema, type FlightFormData } from "@/lib/schemas";
 
 // Interfaces matching backend validation/processing responses
@@ -52,7 +42,6 @@ interface DgipLogEntry {
 
 // Contract address and ABI for the DroneFlight contract
 const contractAddress = "0xbf9da8c38e15105f0ada872ea78512991d6a601c";
-
 const contractABI = [
   {
     "inputs": [
@@ -424,6 +413,15 @@ export default function RegisterFlightPage() {
   // New state for DGIP on-chain linking transaction hash
   const [dgipRegistrationTxHash, setDgipRegistrationTxHash] = useState<`0x${string}` | null>(null);
 
+  // New state for Story Protocol registration process
+  const [isRegisteringIp, setIsRegisteringIp] = useState(false);
+  const [storyProtocolResult, setStoryProtocolResult] = useState<{
+    ipId: string;
+    licenseTermsId: number;
+    mintedTokenId: string;
+    dbUpdateMessage: string; // Message from backend Python script update
+  } | null>(null);
+
   // Wagmi hooks for wallet connection, contract interaction, and config
   const { isConnected } = useAccount();
   const { writeContractAsync } = useWriteContract();
@@ -476,9 +474,8 @@ export default function RegisterFlightPage() {
 
     // Update the displayed log entry whenever currentLogIndex or simulatedDgip changes
     if (simulatedDgip.length > 0 && currentLogIndex < simulatedDgip.length) {
-        setDisplayLog(simulatedDgip[currentLogIndex]);
+      setDisplayLog(simulatedDgip[currentLogIndex]);
     }
-
 
     return () => {
       if (intervalId) {
@@ -502,6 +499,9 @@ export default function RegisterFlightPage() {
     setSimulatedDgip([]); // Clear previous simulation data
     setCurrentLogIndex(0);
     setDisplayLog(null);
+    // Reset Story Protocol specific states
+    setIsRegisteringIp(false);
+    setStoryProtocolResult(null);
 
     // Ensure wallet is connected before proceeding
     if (!isConnected) {
@@ -565,7 +565,6 @@ export default function RegisterFlightPage() {
 
           // Implement the check from duplicate-debug.txt BEFORE calling the contract
           const client = getPublicClient(config); // Pass the config to getPublicClient
-
           if (!client) {
             // This should not happen if Wagmi is configured correctly
             throw new Error("Viem public client is not available.");
@@ -597,7 +596,6 @@ export default function RegisterFlightPage() {
             functionName: 'registerFlight', // Call the initial registration function
             args: [finalDataHash as `0x${string}`], // Pass the correctly formatted bytes32 value
           });
-
           toast(`Initial flight registration transaction sent: ${txResult}. Awaiting confirmation...`); // Notify user
         } catch (writeError: any) {
           // Handle blockchain transaction errors
@@ -607,7 +605,6 @@ export default function RegisterFlightPage() {
           setIsSubmitting(false); // Ensure loading state is turned off on error
           return; // Stop here if on-chain registration fails
         }
-
         setIsSubmitting(false); // Initial submission process complete successfully
       } else {
         // Handle unexpected successful response structure from backend
@@ -616,7 +613,6 @@ export default function RegisterFlightPage() {
         toast.error(errorMessage);
         setIsSubmitting(false);
       }
-
     } catch (error: any) {
       // Handle general errors during the fetch call or unexpected issues
       const genericErrorMessage = error.message || "An unexpected error occurred during initial registration.";
@@ -630,7 +626,6 @@ export default function RegisterFlightPage() {
   // Function to start the DGIP simulation by calling the backend route
   const handleStartSimulation = async () => {
     setIsSimulating(true); // Set simulation loading state
-
     // Reset DGIP simulation and processing states
     setSimulatedDgip([]);
     setCurrentLogIndex(0);
@@ -640,6 +635,7 @@ export default function RegisterFlightPage() {
     setDgipDataHash(null);
     setDgipIpfsCid(null);
     setDgipRegistrationTxHash(null);
+    setStoryProtocolResult(null); // Reset Story Protocol results
 
     try {
       const flightData = form.getValues(); // Get current form values for simulation parameters
@@ -664,7 +660,6 @@ export default function RegisterFlightPage() {
 
       setSimulatedDgip(data.dgipData); // Store the simulated logs
       // Simulation display effect will start automatically once simulatedDgip is set
-
     } catch (error: any) {
       // Handle general errors during the fetch call or simulation process
       const simulationErrorMessage = error.message || "There was an error starting the DGIP simulation.";
@@ -682,7 +677,6 @@ export default function RegisterFlightPage() {
       toast.warning("No DGIP data to process.");
       return;
     }
-
     // The initialDataHash is needed to link the DGIP data on-chain.
     // This hash should have been successfully generated and stored after the initial validation/registration step.
     if (!validationResultData?.dataHash) {
@@ -693,6 +687,7 @@ export default function RegisterFlightPage() {
     setIsProcessingDgip(true); // Set loading state for DGIP processing
     setValidationError(null); // Clear previous errors
     setDgipRegistrationTxHash(null); // Clear previous linking transaction hash
+    setStoryProtocolResult(null); // Reset Story Protocol results
 
     try {
       // Call the new backend endpoint to process DGIP data (hashing, IPFS upload)
@@ -774,7 +769,6 @@ export default function RegisterFlightPage() {
           throw new Error("Invalid DGIP data hash format or length for bytes32 during linking.");
         }
 
-
         // Call the smart contract function to link the DGIP hash to the initial registration
         const txResult = await writeContractAsync({ // Use wagmi hook to interact with contract
           address: contractAddress,
@@ -782,7 +776,6 @@ export default function RegisterFlightPage() {
           functionName: 'registerDGIPData', // Call the linking function
           args: [finalInitialDataHashForLinking as `0x${string}`, finalNewDgipDataHash as `0x${string}`], // Pass the correctly formatted bytes32 values
         });
-
         setDgipRegistrationTxHash(txResult); // Store the linking transaction hash
         toast(`DGIP data linking transaction sent: ${txResult}. Awaiting confirmation...`);
 
@@ -793,7 +786,6 @@ export default function RegisterFlightPage() {
         toast.error(`Failed to link DGIP data on-chain: ${txErrorMessage}`);
         // Note: We don't return here, as the IPFS results are still displayed even if the linking fails.
       }
-
     } catch (error: any) {
       // Handle general errors during the DGIP processing fetch call or unexpected issues
       const genericErrorMessage = error.message || "An unexpected error occurred during DGIP processing.";
@@ -805,6 +797,65 @@ export default function RegisterFlightPage() {
     }
   };
 
+  // Function to handle Story Protocol IP Asset registration
+  const handleRegisterStoryProtocolIP = async () => {
+    // Ensure initial validation and DGIP linking are complete
+    if (!validationResultData?.dataHash || !dgipDataHash) {
+      toast.warning("Initial flight data or DGIP data hash is missing.");
+      return;
+    }
+    if (!dgipRegistrationTxHash) {
+      toast.warning("DGIP data not linked on-chain yet.");
+      return;
+    }
+
+    setIsRegisteringIp(true); // Set loading state
+    setValidationError(null); // Clear previous errors
+    setStoryProtocolResult(null); // Clear previous results
+
+    try {
+      // Call the new backend API route to register the IP Asset on Story Protocol
+      const response = await fetch('/api/story-protocol-register-ip', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dataHash: validationResultData.dataHash, // Initial flight data hash
+          dgipDataHash: dgipDataHash, // DGIP log data hash
+          dgipIpfsCid: dgipIpfsCid, // DGIP IPFS CID (might be null)
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || result.error) {
+        const errorMessage = result.error || `Failed to register IP on Story Protocol (Status: ${response.status}).`;
+        setValidationError(errorMessage);
+        toast.error(errorMessage);
+        return; // Stop here if backend processing fails
+      }
+
+      // Store the results
+      setStoryProtocolResult(result);
+      toast.success("IP Asset registered on Story Protocol!");
+
+      // Display DB update message if any
+      if (result.dbUpdateMessage && result.dbUpdateMessage !== "Unknown database update status.") {
+        toast(result.dbUpdateMessage);
+        if (result.dbUpdateMessage.includes("Error") || result.dbUpdateMessage.includes("Warning")) {
+          console.error("Database update message from backend:", result.dbUpdateMessage);
+        } else {
+          console.log("Database update message from backend:", result.dbUpdateMessage);
+        }
+      }
+    } catch (error: any) {
+      const genericErrorMessage = error.message || "An unexpected error occurred during Story Protocol registration.";
+      console.error("Error in handleRegisterStoryProtocolIP:", error);
+      setValidationError(genericErrorMessage);
+      toast.error(genericErrorMessage);
+    } finally {
+      setIsRegisteringIp(false); // Ensure loading state is turned off
+    }
+  };
 
   // Determine button states and texts based on current process
   const submitButtonText = isSubmitting
@@ -818,6 +869,10 @@ export default function RegisterFlightPage() {
   const processDgipButtonText = isProcessingDgip
     ? "Processing & Uploading DGIP..."
     : "Process & Upload DGIP Logs";
+
+  const registerIpButtonText = isRegisteringIp
+    ? "Registering IP on Story..."
+    : "Register IP Asset on Story Protocol";
 
   // Conditions to control button visibility and state flow
   // Initial registration/validation must be complete (validationResultData exists and isCriticallyCompliant is true)
@@ -837,6 +892,13 @@ export default function RegisterFlightPage() {
     && simulatedDgip.length > 0
     && dgipDataHash === null; // DGIP data hasn't been processed
 
+  // Show this button after DGIP data is linked on-chain and IP hasn't been registered yet
+  const showRegisterStoryProtocolIPButton = validationResultData?.is_critically_compliant === true
+    && validationResultData?.dataHash !== null
+    && dgipDataHash !== null // DGIP data processed
+    && dgipRegistrationTxHash !== null // DGIP linked on-chain
+    && storyProtocolResult === null // IP hasn't been registered yet
+    && !isProcessingDgip; // Not currently processing DGIP
 
   // Show DGIP display if simulating or simulation is complete and logs exist
   const showDgipDisplay = isSimulating || (simulatedDgip.length > 0 && !isSimulating);
@@ -846,57 +908,57 @@ export default function RegisterFlightPage() {
     || validationResultData?.ipfsCid !== null
     || dgipDataHash !== null
     || dgipIpfsCid !== null
-    || dgipRegistrationTxHash !== null;
+    || dgipRegistrationTxHash !== null
+    || storyProtocolResult !== null; // Show if Story Protocol details are available
 
   return (
-    <>
-      <div className="container mx-auto py-10"> {/* Adjust width and center as needed */}
-        <Card className="mx-auto max-w-2xl">
-          <CardHeader>
-            <CardTitle>Register Flight</CardTitle>
-            <CardDescription>
-              Register your drone flight details for compliance, validation, and DGIP generation.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Form {...form}> {/* Pass the form context */}
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6"> {/* Handle form submission */}
-                {/* Render the FlightDetailsDialog component here, containing the form fields */}
-                <FlightDetailsDialog form={form} /> {/* Pass the form object to the dialog component */}
+    <div className="flex flex-col items-center justify-center min-h-screen py-8">
+      <Card className="w-full max-w-2xl">
+        <CardHeader className="space-y-1 text-center">
+          <CardTitle className="text-2xl font-bold">Register Flight</CardTitle>
+          <CardDescription>
+            Register your drone flight details for compliance, validation, and DGIP generation.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              {/* Render the FlightDetailsDialog component here, containing the form fields */}
+              <FlightDetailsDialog form={form} />
 
-                {/* Display validation errors if any */}
-                {validationError && (
-                  <Alert variant="destructive">
-                    <AlertTitle>Validation Error</AlertTitle>
-                    <AlertDescription>{validationError}</AlertDescription>
-                  </Alert>
-                )}
+              {/* Display validation errors if any */}
+              {validationError && (
+                <Alert variant="destructive" className="mt-4">
+                  <AlertTitle>Validation Error</AlertTitle>
+                  <AlertDescription>{validationError}</AlertDescription>
+                </Alert>
+              )}
 
-                {/* Display compliance suggestions if available */}
-                {/* Ensure suggestions are shown regardless of critical status, as the user needs to see them */}
-                {showSuggestions && validationResultData?.complianceMessages && validationResultData.complianceMessages.length > 0 && (
-                  <ComplianceSuggestions suggestions={validationResultData.complianceMessages} />
-                )}
+              {/* Display compliance suggestions if available */}
+              {/* Ensure suggestions are shown regardless of critical status, as the user needs to see them */}
+              {showSuggestions && validationResultData?.complianceMessages && validationResultData.complianceMessages.length > 0 && (
+                <ComplianceSuggestions suggestions={validationResultData.complianceMessages} />
+              )}
 
-                {/* Submit Button for initial registration */}
-                {/* Only show this button if initial validation result is not yet available OR it was not compliant */}
-                {(!validationResultData || !validationResultData.is_critically_compliant) && (
-                  <Button
-                    type="submit"
-                    className="w-full"
-                    disabled={isSubmitting || !isConnected} // Disable while submitting or wallet not connected
-                  >
-                    {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    {submitButtonText} {/* Display dynamic button text */}
-                  </Button>
-                )}
-              </form>
-            </Form> {/* End form */}
+              {/* Submit Button for initial registration */}
+              {/* Only show this button if initial validation result is not yet available OR it was not compliant */}
+              {(!validationResultData || !validationResultData.is_critically_compliant) && (
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={isSubmitting || !isConnected} // Disable while submitting or wallet not connected
+                >
+                  {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {submitButtonText} {/* Display dynamic button text */}
+                </Button>
+              )}
+            </form>
+          </Form>
 
-            {/* Button to Start DGIP Simulation - appears after initial registration is complete and compliant */}
-            {showStartSimulationButton && (
-              <>
-                <div className="py-4"></div> {/* Add some spacing */}
+          {/* Button to Start DGIP Simulation - appears after initial registration is complete and compliant */}
+          {showStartSimulationButton && (
+            <>
+              <div className="mt-6 mb-4 flex justify-center">
                 <Button
                   onClick={handleStartSimulation} // Call the simulation handler
                   disabled={isSimulating} // Disable while simulating
@@ -905,26 +967,28 @@ export default function RegisterFlightPage() {
                   {isSimulating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   {startSimulationButtonText} {/* Display dynamic button text */}
                 </Button>
-              </>
-            )}
+              </div>
+            </>
+          )}
 
-            {/* Display for DGIP Simulation */}
-            {showDgipDisplay && (
-              <>
-                 <div className="py-4"></div> {/* Add some spacing */}
+          {/* Display for DGIP Simulation */}
+          {showDgipDisplay && (
+            <>
+              <div className="mt-6 mb-4 flex justify-center">
                 <DgipSimulationDisplay
                   displayLog={displayLog}
                   currentLogIndex={currentLogIndex}
                   totalLogs={simulatedDgip.length}
                   isSimulating={isSimulating}
                 />
-              </>
-            )}
+              </div>
+            </>
+          )}
 
-            {/* Button to Process & Upload DGIP Logs - appears after simulation finishes and logs exist */}
-            {showProcessDgipButton && (
-              <>
-                 <div className="py-4"></div> {/* Add some spacing */}
+          {/* Button to Process & Upload DGIP Logs - appears after simulation finishes and logs exist */}
+          {showProcessDgipButton && (
+            <>
+              <div className="mt-6 mb-4 flex justify-center">
                 <Button
                   onClick={handleProcessAndUploadDgip} // Call the DGIP processing handler
                   disabled={isProcessingDgip} // Disable while processing
@@ -933,66 +997,99 @@ export default function RegisterFlightPage() {
                   {isProcessingDgip && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   {processDgipButtonText} {/* Display dynamic button text */}
                 </Button>
-              </>
-            )}
+              </div>
+            </>
+          )}
 
-            {/* Display Registration Details (Initial and DGIP) */}
-            {showRegistrationDetails && (
-              <>
-                <div className="py-4"></div> {/* Add some spacing */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Registration Details</CardTitle>
-                    <CardDescription>
-                      On-chain and IPFS data for this flight.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2 text-sm">
-                      {/* break-all to prevent overflow */}
-                      {/* Display Initial Registration Details */}
-                      {validationResultData?.dataHash && (
-                        <p className="break-all">
-                          <b>Initial Flight Plan Hash (Keccak256):</b>{" "}
-                          {validationResultData.dataHash}
-                        </p>
-                      )}
-                      {/* IPFS CID for the initial flight plan data is not used downstream for linking in the current flow,
-                          but is kept here for visibility as it was part of the original validation step output structure */}
-                      {validationResultData?.ipfsCid && (
-                         <p className="break-all">
-                           <b>Initial Flight Plan IPFS CID:</b>{" "}
-                           {validationResultData.ipfsCid}
-                         </p>
-                       )}
+          {/* Add button for Story Protocol Registration */}
+          {showRegisterStoryProtocolIPButton && (
+            <>
+              <div className="mt-6 mb-4 flex justify-center">
+                <Button
+                  onClick={handleRegisterStoryProtocolIP}
+                  disabled={isRegisteringIp}
+                  className="w-full"
+                >
+                  {isRegisteringIp && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {registerIpButtonText} {/* Display dynamic button text */}
+                </Button>
+              </div>
+            </>
+          )}
 
-                      {/* Display DGIP Processing Details */}
-                      {dgipDataHash && (
-                        <p className="break-all">
-                          <b>DGIP Log Data Hash (Keccak256):</b> {dgipDataHash}
-                        </p>
-                      )}
-                      {dgipIpfsCid && (
-                        <p className="break-all">
-                          <b>DGIP Log IPFS CID:</b> {dgipIpfsCid}
-                        </p>
-                      )}
-                      {dgipRegistrationTxHash && (
-                        <p className="break-all">
-                          <b>DGIP On-Chain Linking Tx Hash:</b>{" "}
-                          <a href={`https://sepolia.etherscan.io/tx/${dgipRegistrationTxHash}`} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
-                           {dgipRegistrationTxHash}
-                          </a>
-                        </p>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              </>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-    </>
+          {/* Display Registration Details (Initial and DGIP) */}
+          {showRegistrationDetails && (
+            <Card className="w-full max-w-2xl mt-6">
+              <CardHeader>
+                <CardTitle>Registration Details</CardTitle>
+                <CardDescription>
+                  On-chain and IPFS data for this flight.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="break-all text-sm">
+                {/* Display Initial Registration Details */}
+                {validationResultData?.dataHash && (
+                  <p className="font-semibold">*Initial Flight Plan Hash (Keccak256):*{" "}
+                    <span className="font-normal">{validationResultData.dataHash}</span>
+                  </p>
+                )}
+                {/* IPFS CID for the initial flight plan data is not used downstream for linking in the current flow,
+                    but is kept here for visibility as it was part of the original validation step output structure */}
+                {validationResultData?.ipfsCid && (
+                  <p className="font-semibold">*Initial Flight Plan IPFS CID:*{" "}
+                    <span className="font-normal">{validationResultData.ipfsCid}</span>
+                  </p>
+                )}
+
+                {/* Display DGIP Processing Details */}
+                {dgipDataHash && (
+                  <p className="font-semibold">*DGIP Log Data Hash (Keccak256):*{" "}
+                    <span className="font-normal">{dgipDataHash}</span>
+                  </p>
+                )}
+                {dgipIpfsCid && (
+                  <p className="font-semibold">*DGIP Log IPFS CID:*{" "}
+                    <span className="font-normal">{dgipIpfsCid}</span>
+                  </p>
+                )}
+                {dgipRegistrationTxHash && (
+                  <p className="font-semibold">*DGIP On-Chain Linking Tx Hash:*{" "}
+                    <a
+                      href={`https://sepolia.etherscan.io/tx/${dgipRegistrationTxHash}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-500 hover:underline font-normal"
+                    >
+                      {dgipRegistrationTxHash}
+                    </a>
+                  </p>
+                )}
+
+                {/* Display Story Protocol Details */}
+                {storyProtocolResult && (
+                  <>
+                    <h4 className="font-bold mt-4">Story Protocol IP Asset Details:</h4>
+                    <p className="font-semibold">*IP Asset ID:*{" "}
+                      <span className="font-normal">{storyProtocolResult.ipId}</span>
+                    </p>
+                    <p className="font-semibold">*License Terms ID:*{" "}
+                      <span className="font-normal">{storyProtocolResult.licenseTermsId}</span>
+                    </p>
+                    <p className="font-semibold">*Minted NFT Token ID:*{" "}
+                      <span className="font-normal">{storyProtocolResult.mintedTokenId}</span>
+                    </p>
+                    {storyProtocolResult.dbUpdateMessage && (
+                      <p className="font-semibold">Database Update Status:{" "}
+                        <span className="font-normal">{storyProtocolResult.dbUpdateMessage}</span>
+                      </p>
+                    )}
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }
