@@ -41,7 +41,7 @@ interface DgipLogEntry {
 }
 
 // Contract address and ABI for the DroneFlight contract
-const contractAddress = "0xbf9da8c38e15105f0ada872ea78512991d6a601c";
+const contractAddress = "0x4f3880A15Ea6f0E1A269c59e44855a9963B86949";
 const contractABI = [
   {
     "inputs": [
