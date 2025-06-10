@@ -1,228 +1,251 @@
-"use client"
+'use client';
 
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Badge } from "@/components/ui/badge"
-import { DrillIcon as Drone, Search, Filter, Download, Eye } from "lucide-react"
-import { FlightDetailsDialog } from "@/components/flight-details-dialog"
+import { useEffect, useState } from "react";
+import { useAccount } from "wagmi";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { toast } from "sonner";
+import { Loader2 } from 'lucide-react';
 
-// Sample flight data
-const flightData = [
-  {
-    id: "FL-001",
-    droneName: "DJI Mavic 3",
-    date: "Apr 12, 2025",
-    location: "Downtown Area",
-    duration: "45 min",
-    purpose: "Survey",
-    status: "Completed",
-  },
-  {
-    id: "FL-002",
-    droneName: "Autel Evo II",
-    date: "Apr 10, 2025",
-    location: "Construction Site",
-    duration: "30 min",
-    purpose: "Inspection",
-    status: "Completed",
-  },
-  {
-    id: "FL-003",
-    droneName: "DJI Mini 3",
-    date: "Apr 8, 2025",
-    location: "City Park",
-    duration: "20 min",
-    purpose: "Recreational",
-    status: "Completed",
-  },
-  {
-    id: "FL-004",
-    droneName: "Skydio 2+",
-    date: "Apr 5, 2025",
-    location: "Residential Area",
-    duration: "15 min",
-    purpose: "Photography",
-    status: "Cancelled",
-  },
-  {
-    id: "FL-005",
-    droneName: "DJI Mavic 3",
-    date: "Apr 15, 2025",
-    location: "Beach Area",
-    duration: "60 min",
-    purpose: "Videography",
-    status: "Scheduled",
-  },
-  {
-    id: "FL-006",
-    droneName: "Autel Evo II",
-    date: "Apr 14, 2025",
-    location: "Industrial Zone",
-    duration: "40 min",
-    purpose: "Inspection",
-    status: "Scheduled",
-  },
-  {
-    id: "FL-007",
-    droneName: "DJI Mini 3",
-    date: "Mar 30, 2025",
-    location: "Mountain Trail",
-    duration: "25 min",
-    purpose: "Recreational",
-    status: "Completed",
-  },
-  {
-    id: "FL-008",
-    droneName: "Skydio 2+",
-    date: "Mar 25, 2025",
-    location: "River Valley",
-    duration: "35 min",
-    purpose: "Survey",
-    status: "Completed",
-  },
-]
+// Define the interface for a FlightRecord, including Story Protocol details
+interface FlightRecord {
+    dataHash: string; // The Keccak256 hash of the initial flight data
+    ipfsCid: string | null; // IPFS CID of the initial flight data
+    ipId: string | null; // Story Protocol IP Asset ID
+    licenseTermsId: number | null; // Story Protocol License Terms ID
+    droneName: string; // Add other relevant flight details you might want to display from your initial flight data
+    flightDate: string;
+}
 
 export default function FlightHistoryPage() {
-  const [searchTerm, setSearchTerm] = useState("")
-  const [statusFilter, setStatusFilter] = useState("all")
-  const [selectedFlight, setSelectedFlight] = useState<(typeof flightData)[0] | null>(null)
-  const [isDialogOpen, setIsDialogOpen] = useState(false)
+    const { isConnected, address } = useAccount(); // Get wallet connection status and address
 
-  const filteredFlights = flightData.filter((flight) => {
-    const matchesSearch =
-      flight.droneName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      flight.location.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      flight.id.toLowerCase().includes(searchTerm.toLowerCase())
+    // Explicitly type the state variables to resolve 'never' errors
+    const [flights, setFlights] = useState<FlightRecord[]>([]); // FIX: Explicitly typed as FlightRecord[]
+    const [isLoading, setIsLoading] = useState(true);
+    // FIX: Explicitly typed as string | null to allow storing dataHash
+    const [isSimulatingPayment, setIsSimulatingPayment] = useState<string | null>(null);
 
-    const matchesStatus = statusFilter === "all" || flight.status.toLowerCase() === statusFilter.toLowerCase()
+    useEffect(() => {
+        // Function to fetch flight data from the backend
+        const fetchFlights = async () => {
+            setIsLoading(true); // Set loading state to true
+            try {
+                // --- IMPORTANT: Placeholder for fetching actual flight data ---
+                // In a real application, you would fetch all flights associated with the connected user's
+                // wallet address from your database. This would likely involve a new backend API route
+                // (e.g., `/api/get-user-flights`) that queries your SQLite DB for records in
+                // `flight_mappings` that belong to the user.
+                // For this MVP, we will simulate fetching a single successful flight.
+                // FIX: Initialize with an empty string, allowing the check for replacement
+                const exampleDataHash = "0xccb837f19fb751f0c853261d4f5bf3d3335ba959aba73e3e5c6b74122d6e2a5f"; // <<< REPLACE WITH AN ACTUAL dataHash from your `flight_data.db` (e.g., "0xc33ed0e8d3aa5fc702164de4cbc2b9095908fe22172d14ec1312e76cb8e6e2d4")
 
-    return matchesSearch && matchesStatus
-  })
+                // FIX: Modified the check to be more robust for an empty string placeholder
+                if (!exampleDataHash) {
+                    console.warn("Please replace the empty string in app/flight-history/page.tsx with a valid dataHash from your database to see IP Asset details.");
+                    setFlights([]); // No example flight to show
+                    return;
+                }
 
-  const handleViewDetails = (flight: (typeof flightData)[0]) => {
-    setSelectedFlight(flight)
-    setIsDialogOpen(true)
-  }
+                // Call the new API route to fetch Story Protocol IP details for the example dataHash
+                const ipDetailsResponse = await fetch('/api/get-story-ip-details', { // MODIFIED LINE
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ dataHash: exampleDataHash }),
+                  });
 
-  const getStatusBadge = (status: string) => {
-    switch (status.toLowerCase()) {
-      case "completed":
-        return <Badge className="bg-green-500">Completed</Badge>
-      case "scheduled":
+                if (!ipDetailsResponse.ok) {
+                    const errorData = await ipDetailsResponse.json();
+                    throw new Error(errorData.error || `Failed to fetch IP details (Status: ${ipDetailsResponse.status}).`);
+                }
+
+                const ipDetails = await ipDetailsResponse.json();
+                console.log("Fetched IP details:", ipDetails);
+
+                // Construct a mock FlightRecord. In a real app, you'd fetch full flight details
+                // and then augment them with IP details if available.
+                if (ipDetails.ipId && ipDetails.licenseTermsId !== null) {
+                    setFlights([{
+                        dataHash: exampleDataHash,
+                        ipfsCid: "mock_ipfs_cid_from_db", // This would typically also come from your DB query
+                        ipId: ipDetails.ipId,
+                        licenseTermsId: ipDetails.licenseTermsId,
+                        droneName: "DGIP Flight 001", // Mocked drone name for display
+                        flightDate: "2024-07-20", // Mocked flight date for display
+                    }]);
+                } else {
+                    console.warn(`No Story Protocol IP details found for dataHash: ${exampleDataHash}. Make sure Step 4 was completed successfully for this flight.`);
+                    // You might still add the flight but mark it as 'IP Asset not tokenized'
+                    setFlights([{
+                        dataHash: exampleDataHash,
+                        ipfsCid: "mock_ipfs_cid_from_db",
+                        ipId: null,
+                        licenseTermsId: null,
+                        droneName: "DGIP Flight 001",
+                        flightDate: "2024-07-20",
+                    }]);
+                }
+
+            } catch (error: any) {
+                console.error("Error fetching flight history:", error);
+                toast.error(`Failed to load flight history: ${error.message}`);
+                setFlights([]); // Clear flights on error
+            } finally {
+                setIsLoading(false); // Set loading state to false once data is fetched or error occurs
+            }
+        };
+
+        // Only fetch flights if the wallet is connected
+        if (isConnected) {
+            fetchFlights();
+        } else {
+            setFlights([]); // Clear flights if wallet is disconnected
+            setIsLoading(false); // Stop loading
+        }
+    }, [isConnected, address]); // Re-run effect when wallet connection status changes
+
+    // Function to handle the "Simulate Royalty Payment" button click
+    const handleSimulateRoyalty = async (flightDataHash: string, ipAssetId: string, licenseTermsId: number) => {
+        // Ensure IP Asset ID and License Terms ID are available before proceeding
+        if (!ipAssetId) {
+            toast.error("IP Asset ID is missing for this flight. Please ensure it was tokenized in Step 4.");
+            return;
+        }
+        if (licenseTermsId === null || typeof licenseTermsId === 'undefined') {
+            toast.error("License Terms ID is missing for this flight. Please ensure it was tokenized in Step 4.");
+            return;
+        }
+
+        setIsSimulatingPayment(flightDataHash); // Set loading state for this specific flight card
+        toast.info(`Simulating royalty payment for flight (IP ID: ${ipAssetId})...`);
+
+        try {
+            // Call your new backend API route for royalty payment simulation
+            const response = await fetch('/api/simulate-royalty-payment', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ipId: ipAssetId, licenseTermsId: licenseTermsId }), // Pass the IP Asset ID and License Terms ID to the backend
+            });
+
+            const result = await response.json(); // Parse the JSON response from the backend
+
+            // Check for success or error based on the backend's response structure
+            if (!response.ok || result.status === 'error') {
+                const errorMessage = result.message || `Failed to simulate royalty payment (Status: ${response.status}).`;
+                toast.error(errorMessage);
+                console.error("Royalty simulation error:", result);
+            } else {
+                toast.success(`Royalty payment simulated! Transaction Hash: ${result.txHash.substring(0, 10)}...${result.txHash.slice(-8)}`);
+                console.log("Royalty simulation success:", result);
+                // You might want to refresh claimable revenue for User A here in a real scenario (Step 6)
+            }
+
+        } catch (error: any) {
+            console.error("Error during royalty payment simulation fetch:", error);
+            toast.error(`An unexpected error occurred during simulation: ${error.message}`);
+        } finally {
+            setIsSimulatingPayment(null); // Clear loading state for the current flight
+        }
+    };
+
+    // Render content based on wallet connection and loading status
+    if (!isConnected) {
         return (
-          <Badge variant="outline" className="text-blue-500 border-blue-500">
-            Scheduled
-          </Badge>
-        )
-      case "cancelled":
-        return <Badge variant="destructive">Cancelled</Badge>
-      default:
-        return <Badge variant="outline">{status}</Badge>
+            <div className="flex flex-col items-center justify-center min-h-[60vh] px-4 text-center">
+                <Card className="w-full max-w-md">
+                    <CardHeader>
+                        <CardTitle>Connect Wallet to View Flight History</CardTitle>
+                        <CardDescription>
+                            Please connect your wallet to see your registered drone flights and manage your IP Assets.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        {/* Assuming WalletConnect component is available and handles connection */}
+                        {/* You will need to import WalletConnect if it's not already */}
+                        {/* <WalletConnect /> */}
+                    </CardContent>
+                </Card>
+            </div>
+        );
     }
-  }
 
-  return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Flight History</h1>
-        <p className="text-muted-foreground">View and manage your past and upcoming drone flights</p>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Drone className="h-5 w-5" />
-            Flight Records
-          </CardTitle>
-          <CardDescription>A comprehensive history of all your registered drone flights</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col gap-4">
-            <div className="flex flex-col sm:flex-row gap-4">
-              <div className="relative flex-1">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search flights..."
-                  className="pl-8"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </div>
-
-              <div className="flex items-center gap-2">
-                <Filter className="h-4 w-4 text-muted-foreground" />
-                <Select defaultValue="all" onValueChange={setStatusFilter}>
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="Filter by status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Statuses</SelectItem>
-                    <SelectItem value="completed">Completed</SelectItem>
-                    <SelectItem value="scheduled">Scheduled</SelectItem>
-                    <SelectItem value="cancelled">Cancelled</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                <Button variant="outline" size="icon">
-                  <Download className="h-4 w-4" />
-                </Button>
-              </div>
+    if (isLoading) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[60vh] px-4 text-center">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <p className="mt-4 text-lg">Loading flight history...</p>
             </div>
+        );
+    }
 
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Flight ID</TableHead>
-                    <TableHead>Drone</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead className="hidden md:table-cell">Location</TableHead>
-                    <TableHead className="hidden md:table-cell">Duration</TableHead>
-                    <TableHead className="hidden md:table-cell">Purpose</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredFlights.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                        No flights found matching your search criteria
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    filteredFlights.map((flight) => (
-                      <TableRow key={flight.id}>
-                        <TableCell className="font-medium">{flight.id}</TableCell>
-                        <TableCell>{flight.droneName}</TableCell>
-                        <TableCell>{flight.date}</TableCell>
-                        <TableCell className="hidden md:table-cell">{flight.location}</TableCell>
-                        <TableCell className="hidden md:table-cell">{flight.duration}</TableCell>
-                        <TableCell className="hidden md:table-cell">{flight.purpose}</TableCell>
-                        <TableCell>{getStatusBadge(flight.status)}</TableCell>
-                        <TableCell className="text-right">
-                          <Button variant="ghost" size="icon" onClick={() => handleViewDetails(flight)}>
-                            <Eye className="h-4 w-4" />
-                            <span className="sr-only">View details</span>
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {selectedFlight && (
-        <FlightDetailsDialog flight={selectedFlight} open={isDialogOpen} onOpenChange={setIsDialogOpen} />
-      )}
-    </div>
-  )
+    return (
+        <div className="container mx-auto p-4 md:p-8">
+            <h2 className="text-3xl font-bold mb-6 text-center">Your Flight History & IP Assets</h2>
+            {flights.length === 0 ? (
+                <Card className="w-full max-w-2xl mx-auto text-center py-8">
+                    <CardContent>
+                        <p className="text-lg text-muted-foreground">No flights found. Register a new flight to get started!</p>
+                    </CardContent>
+                </Card>
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {flights.map((flight) => (
+                        <Card key={flight.dataHash}>
+                            <CardHeader>
+                                <CardTitle>{flight.droneName} Flight on {flight.flightDate}</CardTitle>
+                                <CardDescription>
+                                    <ul className="text-sm text-muted-foreground mt-2 space-y-1">
+                                        <li>*Data Hash:* {flight.dataHash}</li>
+                                        {/* Display IPFS CID if available */}
+                                        {flight.ipfsCid && (
+                                            <li>
+                                                *IPFS CID:*{" "}
+                                                <a href={`https://ipfs.io/ipfs/${flight.ipfsCid}`} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
+                                                    {flight.ipfsCid}
+                                                </a>
+                                            </li>
+                                        )}
+                                    </ul>
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                {flight.ipId ? (
+                                    <div className="space-y-2">
+                                        <p className="font-semibold text-lg">Story Protocol IP Asset Details:</p>
+                                        <ul className="text-sm space-y-1">
+                                            <li>
+                                                *IP Asset ID:*{" "}
+                                                <a href={`https://aeneid.explorer.story.foundation/ip/${flight.ipId}`} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
+                                                    {flight.ipId}
+                                                </a>
+                                            </li>
+                                            <li>*License Terms ID:* {flight.licenseTermsId}</li>
+                                        </ul>
+                                        {/* Button to simulate royalty payment */}
+                                        <Button
+                                            onClick={() => handleSimulateRoyalty(flight.dataHash, flight.ipId!, flight.licenseTermsId!)}
+                                            disabled={isSimulatingPayment === flight.dataHash} // Disable if this flight is simulating
+                                            className="mt-4 w-full"
+                                        >
+                                            {isSimulatingPayment === flight.dataHash ? (
+                                                <>
+                                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                                    Simulating Payment...
+                                                </>
+                                            ) : (
+                                                "Simulate Royalty Payment"
+                                            )}
+                                        </Button>
+                                    </div>
+                                ) : (
+                                    // Message if IP Asset is not tokenized (Step 4 not completed for this flight)
+                                    <p className="text-red-500">IP Asset not yet tokenized for this flight (Step 4 required).</p>
+                                )}
+                            </CardContent>
+                        </Card>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
 }

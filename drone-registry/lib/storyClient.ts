@@ -1,24 +1,12 @@
-import path from "path";
-import { fileURLToPath } from "url";
 import { http } from "viem";
 import { privateKeyToAccount, Address } from "viem/accounts";
 import { StoryClient, StoryConfig } from "@story-protocol/core-sdk";
 import dotenv from "dotenv";
 
-// ⛑ Recreate __dirname in ESM
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// Load environment variables from .env file
+dotenv.config();
 
-console.log('storyClient __dirname:', __dirname);
-console.log('Expected .env path:', path.resolve(__dirname, '../.env'));
-
-// Load env vars from correct path
-dotenv.config({ path: path.resolve(__dirname, "../.env") });
-
-console.log('Loaded WALLET_PRIVATE_KEY:', process.env.WALLET_PRIVATE_KEY ? '[set]' : '[NOT SET]');
-console.log('Loaded RPC_PROVIDER_URL:', process.env.RPC_PROVIDER_URL ? '[set]' : '[NOT SET]');
-
-// Ensure required env vars are present
+// Retrieve private key and RPC URL from environment variables
 const privateKey = process.env.WALLET_PRIVATE_KEY as Address;
 const rpcProviderUrl = process.env.RPC_PROVIDER_URL;
 
@@ -30,13 +18,16 @@ if (!rpcProviderUrl) {
   throw new Error("RPC_PROVIDER_URL environment variable is not set.");
 }
 
-// Setup Story Client
-const account = privateKeyToAccount(privateKey);
+// Initialize the account from the private key and export it
+// This account object contains the wallet address used by the StoryClient for signing transactions.
+export const account = privateKeyToAccount(privateKey); // MODIFIED LINE: Added 'export'
 
+// Configure the Story Client
 const config: StoryConfig = {
-  account,
+  account: account, // the account object from above
   transport: http(rpcProviderUrl),
-  chainId: "aeneid", // Story Protocol testnet
+  chainId: "aeneid", // Story Protocol testnet chain ID [2]
 };
 
+// Create and export the Story Client instance
 export const storyClient = StoryClient.newClient(config);

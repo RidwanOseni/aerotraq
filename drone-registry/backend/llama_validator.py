@@ -6,24 +6,20 @@ from datetime import datetime, time
 from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass
 
-# Note: LlamaIndex, OpenAI LLM, etc. imports remain as they are used for AI analysis
 from llama_index.core import VectorStoreIndex, Settings
 from llama_index.llms.openai import OpenAI
 from llama_index.core.tools import QueryEngineTool
 from llama_index.core.agent import ReActAgent
 from llama_index.readers.llama_parse import LlamaParse
 
-# Note: Web3 and aioipfs imports remain as they are used for hashing and IPFS
 from web3 import Web3
 import aioipfs
 import asyncio
 from eth_hash.auto import keccak
 
-# Note: sqlite3 and dotenv imports remain
 import sqlite3
 from dotenv import load_dotenv
 
-# Import the MCP client integration (which now gets config from env vars)
 from mcp_integration.client import OpenAIPClientIntegration
 
 # Load environment variables
@@ -44,6 +40,7 @@ class ValidationState:
     ai_report: Optional[str] = None
     validation_package: Optional[Dict[str, Any]] = None
     is_critically_compliant: bool = False
+    
     # New fields for Story Protocol details
     ip_id: Optional[str] = None
     license_terms_id: Optional[int] = None
@@ -70,22 +67,20 @@ class FlightDataValidator:
         db_path = os.getenv("DB_PATH", "flight_data.db")
         conn = sqlite3.connect(db_path)
         c = conn.cursor()
-
-        # Update the schema if needed (e.g., add columns for ip_id and license_terms_id) [Step 4.4, step 4.txt]
+        # Update the schema if needed (e.g., add columns for ip_id and license_terms_id)
         try:
             c.execute('''
-                CREATE TABLE IF NOT EXISTS flight_mappings (
-                    data_hash TEXT PRIMARY KEY,
-                    ipfs_cid TEXT,
-                    ip_id TEXT,
-                    license_terms_id INTEGER
-                )
-            ''')
+CREATE TABLE IF NOT EXISTS flight_mappings (
+data_hash TEXT PRIMARY KEY,
+ipfs_cid TEXT,
+ip_id TEXT,
+license_terms_id INTEGER
+)
+''')
             conn.commit()
         except Exception as e:
-            # In a real application, you would use a database migration tool [Step 4.4, step 4.txt]
+            # In a real application, you would use a database migration tool
             print(f"Warning: Could not ensure flight_mappings table schema: {e}", file=sys.stderr)
-
         return conn
 
     def _reset_state(self) -> None:
@@ -122,7 +117,6 @@ class FlightDataValidator:
         flight_area_center_obj = flight_data.get("flightAreaCenter", {})
         normalized_latitude = self._normalize_float(flight_area_center_obj.get("latitude"))
         normalized_longitude = self._normalize_float(flight_area_center_obj.get("longitude"))
-
         package = {
             "flight_data": {
                 "droneName": self._normalize_string(flight_data.get("droneName")),
@@ -167,35 +161,31 @@ class FlightDataValidator:
         """Store the mapping between data hash, IPFS CID, IP ID, and License Terms ID in the database."""
         if not self._db_conn:
             raise RuntimeError("Database connection not initialized")
-
         c = self._db_conn.cursor()
-
-        # Update the schema if needed (e.g., add columns for ip_id and license_terms_id) [Step 4.4, step 4.txt]
+        # Update the schema if needed (e.g., add columns for ip_id and license_terms_id)
         try:
             c.execute('''
-                CREATE TABLE IF NOT EXISTS flight_mappings (
-                    data_hash TEXT PRIMARY KEY,
-                    ipfs_cid TEXT,
-                    ip_id TEXT,
-                    license_terms_id INTEGER
-                )
-            ''')
+CREATE TABLE IF NOT EXISTS flight_mappings (
+data_hash TEXT PRIMARY KEY,
+ipfs_cid TEXT,
+ip_id TEXT,
+license_terms_id INTEGER
+)
+''')
             self._db_conn.commit()
         except Exception as e:
             # In a real application, handle this more robustly
             print(f"Warning: Could not ensure flight_mappings table schema: {e}", file=sys.stderr)
-
         # Use INSERT OR REPLACE to update the record if the data_hash already exists,
         # or INSERT OR IGNORE if you only want to store the first registration
-        # For this step's purpose (adding IP/License later), REPLACE is better [Step 4.4, step 4.txt]
+        # For this step's purpose (adding IP/License later), REPLACE is better
         c.execute('''
-            INSERT OR REPLACE INTO flight_mappings (data_hash, ipfs_cid, ip_id, license_terms_id)
-            VALUES (?, ?, ?, ?)
-        ''', (data_hash, ipfs_cid, ip_id, license_terms_id))
+INSERT OR REPLACE INTO flight_mappings (data_hash, ipfs_cid, ip_id, license_terms_id)
+VALUES (?, ?, ?, ?)
+''', (data_hash, ipfs_cid, ip_id, license_terms_id))
         self._db_conn.commit()
         print(f"Mapping stored/updated for hash {data_hash}: ipfs_cid={ipfs_cid}, ip_id={ip_id}, license_terms_id={license_terms_id}", file=sys.stderr)
-
-        # Update state to include IP ID and License Terms ID if provided [Step 4.4, step 4.txt]
+        # Update state to include IP ID and License Terms ID if provided
         if ip_id:
             self._state.ip_id = ip_id
         if license_terms_id is not None:
@@ -205,15 +195,13 @@ class FlightDataValidator:
         """Retrieve flight data including Story Protocol details by data hash."""
         if not self._db_conn:
             raise RuntimeError("Database connection not initialized")
-
         c = self._db_conn.cursor()
         c.execute('SELECT data_hash, ipfs_cid, ip_id, license_terms_id FROM flight_mappings WHERE data_hash = ?', (data_hash,))
         row = c.fetchone()
-
         if row:
-            # Adjusted indexing as per the schema definition [Step 4.4, step 4.txt]
+            # Adjusted indexing to return the actual values
             return {
-                "dataHash": row,
+                "dataHash": row[0],
                 "ipfsCid": row[1],
                 "ipId": row[2],
                 "licenseTermsId": row[3],
@@ -223,26 +211,21 @@ class FlightDataValidator:
     async def update_story_protocol_details(self, data_hash: str, ip_id: str, license_terms_id: int):
         """Update a flight record with Story Protocol IP ID and License Terms ID."""
         print(f"Attempting to update flight record {data_hash} with IP ID {ip_id} and License Terms ID {license_terms_id}", file=sys.stderr)
-
-        # Ensure DB connection is active for this operation
+        # Ensure database connection is initialized for this operation
         if not self._db_conn:
             self._db_conn = self._init_db()
-
         c = self._db_conn.cursor()
-
         # First, check if the flight hash exists
         c.execute('SELECT data_hash FROM flight_mappings WHERE data_hash = ?', (data_hash,))
         if c.fetchone() is None:
             raise ValueError(f"Flight hash {data_hash} not found in database.")
-
         # Update the record
         c.execute('''
-            UPDATE flight_mappings
-            SET ip_id = ?, license_terms_id = ?
-            WHERE data_hash = ?
-        ''', (ip_id, license_terms_id, data_hash))
+UPDATE flight_mappings
+SET ip_id = ?, license_terms_id = ?
+WHERE data_hash = ?
+''', (ip_id, license_terms_id, data_hash))
         self._db_conn.commit()
-
         print(f"Successfully updated flight record {data_hash} with Story Protocol details.", file=sys.stderr)
         return {"status": "success", "message": "Story Protocol details updated successfully."}
 
@@ -255,7 +238,6 @@ class FlightDataValidator:
             "drone_weight": []
         }
         flight_data = self._state.flight_data
-
         # Check flight date
         flight_date_str = flight_data.get("flightDate")
         if flight_date_str:
@@ -269,26 +251,20 @@ class FlightDataValidator:
                     f"Invalid date format: {flight_date_str}. Expected YYYY-MM-DD.")
         else:
             check_results["flight_date"].append("Flight date is missing.")
-
         # Check flight times
         start_time_str = flight_data.get("startTime")
         end_time_str = flight_data.get("endTime")
-
         operational_start_time = time(9, 0)
         operational_end_time = time(17, 30)
-
         if start_time_str and end_time_str:
             try:
                 start_time_obj = datetime.strptime(start_time_str, "%H:%M").time()
                 end_time_obj = datetime.strptime(end_time_str, "%H:%M").time()
-
                 if end_time_obj <= start_time_obj:
                     check_results["flight_times"].append(
                         f"End time {end_time_str} must be after start time {start_time_str}.")
-
                 isStartTimeValid = operational_start_time <= start_time_obj <= operational_end_time
                 isEndTimeValid = operational_start_time <= end_time_obj <= operational_end_time
-
                 if not isStartTimeValid or not isEndTimeValid:
                     check_results["flight_times"].append(
                         f"Flight times ({start_time_str} - {end_time_str}) must be between 09:00 and 17:30.")
@@ -300,7 +276,6 @@ class FlightDataValidator:
                 check_results["flight_times"].append("Start time is missing.")
             if not end_time_str:
                 check_results["flight_times"].append("End time is missing.")
-
         # Check drone weight
         weight = flight_data.get("weight")
         if weight is not None:
@@ -317,7 +292,6 @@ class FlightDataValidator:
                     f"Invalid weight format: {weight}. Expected a number.")
         else:
             check_results["drone_weight"].append("Drone weight is missing.")
-
         self._state.deterministic_results = check_results
         return check_results
 
@@ -330,7 +304,6 @@ class FlightDataValidator:
         ipfs_client = None
         compliance_messages: List[str] = []
         has_critical_errors = False
-
         try:
             # 1. Initialize state
             self._reset_state()
@@ -349,7 +322,6 @@ class FlightDataValidator:
             print("Calling MCP validation...", file=sys.stderr)
             mcp_result = {"status": "skipped", "message": "MCP validation skipped or failed to initialize."}
             has_mcp_errors = True
-
             flight_area_center = flight_data.get('flightAreaCenter')
             if flight_area_center and ( (isinstance(flight_area_center, str) and ',' in flight_area_center) or isinstance(flight_area_center, dict) ):
                 try:
@@ -376,7 +348,6 @@ class FlightDataValidator:
 Given the following flight details, deterministic check results, and No-Fly Zone validation findings,
 synthesize a comprehensive report detailing all potential compliance issues.
 Present the findings as a single list of bullet points.
-
 If no critical issues are found based on the deterministic and NFZ validation information, state that the flight appears compliant.
 
 Flight Details:
@@ -394,10 +365,8 @@ Please analyze all the above information and provide a comprehensive compliance 
 3. Provides clear, actionable recommendations (if any issues)
 4. Notes any conflicting or ambiguous findings
 5. Highlights any validation errors or missing information encountered by the *validators*.
-
 Structure your response with 'Answer:' followed by the comprehensive report.
 """
-
             # 6. Call AI agent
             print("Initializing AI agent...", file=sys.stderr)
             ai_report = f"Error during AI analysis: AI agent could not be initialized or failed."
@@ -437,25 +406,21 @@ Structure your response with 'Answer:' followed by the comprehensive report.
             # 8. Only proceed with serialization, hashing, IPFS, and DB if no critical errors
             if self._state.is_critically_compliant:
                 print("No critical errors found. Proceeding with serialization and storage.", file=sys.stderr)
-
                 # 9. Gather data into a validation package structure
                 validation_package = self._create_validation_package(
                     self._state.flight_data, deterministic_results, mcp_result, self._state.ai_report
                 )
-
                 # 10. Serialize the combined data
                 print("Serializing validation package...", file=sys.stderr)
                 serialized_data = self.serialize_validation_package(validation_package)
                 print("Data serialized.", file=sys.stderr)
-
-                # 11. Calculate hash
                 print("Validation package content (dict):", json.dumps(self._state.validation_package, indent=2), file=sys.stderr)
                 print("Serialized data content (string):", self._state.serialized_data, file=sys.stderr)
+                # 11. Calculate hash
                 print("Calculating hash...", file=sys.stderr)
                 data_hash = self.calculate_hash(serialized_data)
                 data_hash_hex = "0x" + data_hash.hex()
                 print(f"Data hash calculated: {data_hash_hex}", file=sys.stderr)
-
                 # 12. Upload to IPFS
                 print("Uploading data to IPFS...", file=sys.stderr)
                 ipfs_cid = None
@@ -470,7 +435,6 @@ Structure your response with 'Answer:' followed by the comprehensive report.
                     sys.stderr.write(f"Warning: Failed to upload data to IPFS: {ipfs_error}\n")
                     print(f"Warning: Failed to upload data to IPFS: {ipfs_error}", file=sys.stderr)
                     ipfs_cid = None
-
                 # 13. Store mapping in database
                 if data_hash_hex:
                     print("Storing mapping in database...", file=sys.stderr)
@@ -494,7 +458,6 @@ Structure your response with 'Answer:' followed by the comprehensive report.
                     }
                 }
                 return result
-
             else: # has_critical_errors is True
                 print("Critical errors found. Skipping serialization, hashing, IPFS upload, and DB storage.", file=sys.stderr)
                 result = {
@@ -509,7 +472,6 @@ Structure your response with 'Answer:' followed by the comprehensive report.
                     }
                 }
                 return result
-
         except Exception as e:
             print(f"Unexpected error in async processing: {e}", file=sys.stderr)
             final_compliance_messages = [f"Unexpected processing error: {str(e)}"]
@@ -534,47 +496,50 @@ Structure your response with 'Answer:' followed by the comprehensive report.
     async def main(self):
         """Main entry point for the script. Handles different actions based on input."""
         print("Script started.", file=sys.stderr)
-
         # Initialize _db_conn at the top level of main to ensure it's closed in finally
         self._db_conn = None
-
         try:
             input_json = sys.stdin.read()
             print(f"Received input JSON: {input_json}", file=sys.stderr)
-
             if not input_json:
                 raise ValueError("No input JSON received.")
-
             parsed_input = json.loads(input_json)
-
-            # Check if the input specifies a specific action [Step 4.5, step 4.txt]
+            # Check if the input specifies a specific action
             action = parsed_input.get("action")
-
             if action == "update_story_protocol_details":
-                # Handle updating story protocol details [Step 4.5, step 4.txt]
+                # Handle updating story protocol details
                 data_hash = parsed_input.get("dataHash")
                 ip_id = parsed_input.get("ipId")
                 license_terms_id = parsed_input.get("licenseTermsId")
-
                 if not data_hash or not ip_id or license_terms_id is None:
                     raise ValueError("Missing required parameters for update_story_protocol_details action.")
-
-                # Ensure database connection is initialized for this action [Step 4.5, step 4.txt]
+                # Ensure database connection is initialized for this action
                 self._db_conn = self._init_db()
                 result = await self.update_story_protocol_details(data_hash, ip_id, license_terms_id)
                 print(json.dumps(result)) # Output result to stdout
-
+            elif action == "get_story_protocol_details_by_hash": # NEW ACTION BLOCK
+                data_hash = parsed_input.get("dataHash")
+                if not data_hash:
+                    raise ValueError("Missing dataHash for get_story_protocol_details_by_hash action.")
+                self._db_conn = self._init_db() # Init DB here
+                details = self.get_flight_data_by_hash(data_hash)
+                if details:
+                    # Ensure licenseTermsId is a standard int for JSON serialization if it came as BigInt.
+                    # SQLite stores INTEGER, so it should be fine.
+                    if details.get("licenseTermsId") is not None:
+                        details["licenseTermsId"] = int(details["licenseTermsId"])
+                    print(json.dumps({"status": "success", "details": details}))
+                else:
+                    print(json.dumps({"status": "error", "message": f"No details found for dataHash: {data_hash}"}))
             else:
-                # Assume standard validation/processing flow if no action specified [Step 4.5, step 4.txt]
+                # Assume standard validation/processing flow if no action specified
                 flight_data = parsed_input # Assume the input is flight data for validation
-
                 # Ensure database connection is initialized for the validation flow as well
                 self._db_conn = self._init_db()
                 result = await self.validate_and_process_flight_data(flight_data)
-                print(json.dumps(result)) # The process method already prints its result to stdout
-
+                # The process method already prints its result to stdout
+                print(json.dumps(result)) # This line was commented out and is now uncommented to fix the error.
             print("Script finished successfully.", file=sys.stderr)
-
         except (json.JSONDecodeError, ValueError) as e:
             error_response = {"status": "error", "message": f"Input processing error: {str(e)}", "dataHash": None, "ipfsCid": None, "is_critically_compliant": False}
             print(json.dumps(error_response), file=sys.stderr)
