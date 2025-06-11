@@ -47,9 +47,9 @@ export async function POST(request: NextRequest) {
         // The Story Protocol SDK's `claimableRevenue` method expects `royaltyVaultIpId` as the IP ID.
         // The SDK internally resolves this to the actual vault address for the contract call.
         const claimableAmountBigInt: bigint = await storyClient.royalty.claimableRevenue({
-            royaltyVaultIpId: ipId as Address,
-            claimer: claimerAddress as Address,
-            token: WIP_TOKEN_ADDRESS,
+            royaltyVaultIpId: ipId as Address, // The IP Asset ID itself is the royalty vault ID
+            claimer: ipId as Address, // Changed to the IP Asset ID as the royalty token holder
+            token: WIP_TOKEN_ADDRESS, // The token you are checking for (e.g., $WIP)
         });
 
         console.log(`Claimable amount for IP ID ${ipId}: ${claimableAmountBigInt.toString()}`);

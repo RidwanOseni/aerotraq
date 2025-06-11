@@ -38,7 +38,7 @@ export default function FlightHistoryPage() {
                 // `flight_mappings` that belong to the user.
                 // For this MVP, we will simulate fetching a single successful flight.
                 // FIX: Initialize with an empty string, allowing the check for replacement
-                const exampleDataHash = "0xccb837f19fb751f0c853261d4f5bf3d3335ba959aba73e3e5c6b74122d6e2a5f"; // <<< REPLACE WITH AN ACTUAL dataHash from your `flight_data.db` (e.g., "0xc33ed0e8d3aa5fc702164de4cbc2b9095908fe22172d14ec1312e76cb8e6e2d4")
+                const exampleDataHash = "0x93f27a68cc4caacbabbd80d0f42817c03cd6d52a6e2a2b32460a44e54bd74260"; // <<< REPLACE WITH AN ACTUAL dataHash from your `flight_data.db` (e.g., "0xc33ed0e8d3aa5fc702164de4cbc2b9095908fe22172d14ec1312e76cb8e6e2d4")
 
                 // FIX: Modified the check to be more robust for an empty string placeholder
                 if (!exampleDataHash) {
