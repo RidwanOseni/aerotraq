@@ -14,9 +14,10 @@ from web3 import Web3
 import aioipfs
 import asyncio
 from eth_hash.auto import keccak
-import sqlite3
+import sqlite3 # Essential: Import the sqlite3 module
 from dotenv import load_dotenv
 from mcp_integration.client import OpenAIPClientIntegration
+import contextlib # Import contextlib for redirect_stdout
 
 # Load environment variables
 load_dotenv()
@@ -36,10 +37,10 @@ class ValidationState:
     ai_report: Optional[str] = None
     validation_package: Optional[Dict[str, Any]] = None
     is_critically_compliant: bool = False
-
     # New fields for Story Protocol details
     ip_id: Optional[str] = None
     license_terms_id: Optional[int] = None
+    minted_token_id: Optional[str] = None # Added for minted NFT token ID
 
 class FlightDataValidator:
     def __init__(self):
@@ -55,7 +56,7 @@ class FlightDataValidator:
     def __exit__(self, exc_type, exc_val, exc_tb):
         if self._db_conn:
             self._db_conn.close()
-        self._db_conn = None
+            self._db_conn = None
 
     def _init_db(self) -> sqlite3.Connection:
         """Initialize SQLite database connection and table."""
@@ -70,7 +71,8 @@ class FlightDataValidator:
                     data_hash TEXT PRIMARY KEY,
                     ipfs_cid TEXT,
                     ip_id TEXT,
-                    license_terms_id INTEGER
+                    license_terms_id INTEGER,
+                    minted_token_id TEXT -- Added minted_token_id
                 )
             ''')
             conn.commit()
@@ -153,50 +155,52 @@ class FlightDataValidator:
         self._state.data_hash = keccak(serialized_data.encode('utf-8'))
         return self._state.data_hash
 
-    def store_flight_data(self, data_hash: str, ipfs_cid: str, ip_id: Optional[str] = None, license_terms_id: Optional[int] = None) -> None:
-        """Store the mapping between data hash, IPFS CID, IP ID, and License Terms ID in the database."""
+    def store_flight_data(self, data_hash: str, ipfs_cid: str, ip_id: Optional[str] = None, license_terms_id: Optional[int] = None, minted_token_id: Optional[str] = None) -> None:
+        """Store the mapping between data hash, IPFS CID, IP ID, License Terms ID, and Minted Token ID in the database."""
         if not self._db_conn:
             raise RuntimeError("Database connection not initialized")
         c = self._db_conn.cursor()
-        # Update the schema if needed (e.g., add columns for ip_id and license_terms_id)
         try:
             c.execute('''
                 CREATE TABLE IF NOT EXISTS flight_mappings (
                     data_hash TEXT PRIMARY KEY,
                     ipfs_cid TEXT,
                     ip_id TEXT,
-                    license_terms_id INTEGER
+                    license_terms_id INTEGER,
+                    minted_token_id TEXT -- Ensure this column exists
                 )
             ''')
             self._db_conn.commit()
         except Exception as e:
-            # In a real application, handle this more robustly
-            print(f"Warning: Could not ensure flight_mappings table schema: {e}", file=sys.stderr)
+            print(f"Warning: Could not ensure flight_mappings table schema during store: {e}", file=sys.stderr)
         c.execute('''
-            INSERT OR REPLACE INTO flight_mappings (data_hash, ipfs_cid, ip_id, license_terms_id)
-            VALUES (?, ?, ?, ?)
-        ''', (data_hash, ipfs_cid, ip_id, license_terms_id))
+            INSERT OR REPLACE INTO flight_mappings (data_hash, ipfs_cid, ip_id, license_terms_id, minted_token_id)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (data_hash, ipfs_cid, ip_id, license_terms_id, minted_token_id))
         self._db_conn.commit()
-        print(f"Mapping stored/updated for hash {data_hash}: ipfs_cid={ipfs_cid}, ip_id={ip_id}, license_terms_id={license_terms_id}", file=sys.stderr)
-        # Update state to include IP ID and License Terms ID if provided
+        print(f"Mapping stored/updated for hash {data_hash}: ipfs_cid={ipfs_cid}, ip_id={ip_id}, license_terms_id={license_terms_id}, minted_token_id={minted_token_id}", file=sys.stderr)
+        # Update state to include IP ID, License Terms ID, and Minted Token ID if provided
         if ip_id:
             self._state.ip_id = ip_id
         if license_terms_id is not None:
             self._state.license_terms_id = license_terms_id
+        if minted_token_id:
+            self._state.minted_token_id = minted_token_id
 
     def get_flight_data_by_hash(self, data_hash: str) -> Optional[Dict[str, Any]]:
         """Retrieve flight data including Story Protocol details by data hash."""
         if not self._db_conn:
             raise RuntimeError("Database connection not initialized")
         c = self._db_conn.cursor()
-        c.execute('SELECT data_hash, ipfs_cid, ip_id, license_terms_id FROM flight_mappings WHERE data_hash = ?', (data_hash,))
+        c.execute('SELECT data_hash, ipfs_cid, ip_id, license_terms_id, minted_token_id FROM flight_mappings WHERE data_hash = ?', (data_hash,))
         row = c.fetchone()
         if row:
             return {
-                "dataHash": row[0],  # Extract the string data_hash from the tuple
+                "dataHash": row,
                 "ipfsCid": row[1],
                 "ipId": row[2],
                 "licenseTermsId": row[3],
+                "mintedTokenId": row[4],
             }
         return None
 
@@ -206,40 +210,53 @@ class FlightDataValidator:
             raise RuntimeError("Database connection not initialized")
         c = self._db_conn.cursor()
         if not data_hashes:
-            return [] # Return empty list if no hashes are provided
+            return []
         placeholders = ','.join('?' for _ in data_hashes)
-        c.execute(f'SELECT data_hash, ipfs_cid, ip_id, license_terms_id FROM flight_mappings WHERE data_hash IN ({placeholders})', data_hashes)
+        c.execute(f'SELECT data_hash, ipfs_cid, ip_id, license_terms_id, minted_token_id FROM flight_mappings WHERE data_hash IN ({placeholders})', data_hashes)
         rows = c.fetchall()
         results = []
         for row in rows:
             results.append({
-                "dataHash": row[0],  # Extract the string data_hash from the tuple
+                "dataHash": row[0],
                 "ipfsCid": row[1],
                 "ipId": row[2],
                 "licenseTermsId": row[3],
+                "mintedTokenId": row[4],
             })
         return results
 
-    async def update_story_protocol_details(self, data_hash: str, ip_id: str, license_terms_id: int):
-        """Update a flight record with Story Protocol IP ID and License Terms ID."""
-        print(f"Attempting to update flight record {data_hash} with IP ID {ip_id} and License Terms ID {license_terms_id}", file=sys.stderr)
-        # Ensure database connection is initialized for this operation
+    async def update_story_protocol_details(self, data_hash: str, ip_id: str, license_terms_id: int, minted_token_id: str):
+        """Update a flight record with Story Protocol IP ID, License Terms ID, and Minted Token ID."""
+        print(f"Attempting to update flight record {data_hash} with IP ID {ip_id}, License Terms ID {license_terms_id}, and Minted Token ID {minted_token_id}", file=sys.stderr)
         if not self._db_conn:
             self._db_conn = self._init_db()
         c = self._db_conn.cursor()
-        # First, check if the flight hash exists
         c.execute('SELECT data_hash FROM flight_mappings WHERE data_hash = ?', (data_hash,))
         if c.fetchone() is None:
             raise ValueError(f"Flight hash {data_hash} not found in database.")
-        # Update the record
         c.execute('''
             UPDATE flight_mappings
-            SET ip_id = ?, license_terms_id = ?
+            SET ip_id = ?, license_terms_id = ?, minted_token_id = ?
             WHERE data_hash = ?
-        ''', (ip_id, license_terms_id, data_hash))
+        ''', (ip_id, license_terms_id, minted_token_id, data_hash))
         self._db_conn.commit()
         print(f"Successfully updated flight record {data_hash} with Story Protocol details.", file=sys.stderr)
         return {"status": "success", "message": "Story Protocol details updated successfully."}
+
+    async def get_ipfs_content(self, ipfs_cid: str) -> Optional[Dict[str, Any]]:
+        """Fetches content from IPFS and parses it as JSON."""
+        print(f"Attempting to fetch content from IPFS CID: {ipfs_cid}", file=sys.stderr)
+        try:
+            ipfs_client = aioipfs.AsyncIPFS()
+            async with ipfs_client:
+                data_bytes = await ipfs_client.core.cat(ipfs_cid)
+                data_string = data_bytes.decode('utf-8')
+                parsed_data = json.loads(data_string)
+            print(f"Successfully fetched and parsed IPFS content for CID {ipfs_cid}", file=sys.stderr)
+            return parsed_data
+        except Exception as e:
+            print(f"Error fetching or parsing IPFS content for CID {ipfs_cid}: {e}", file=sys.stderr)
+            return None
 
     async def perform_deterministic_checks(self) -> Dict[str, List[str]]:
         """Perform basic deterministic checks on flight data."""
@@ -275,11 +292,14 @@ class FlightDataValidator:
             try:
                 start_time_obj = datetime.strptime(start_time_str, "%H:%M").time()
                 end_time_obj = datetime.strptime(end_time_str, "%H:%M").time()
+
                 if end_time_obj <= start_time_obj:
                     check_results["flight_times"].append(
                         f"End time {end_time_str} must be after start time {start_time_str}.")
+
                 isStartTimeValid = operational_start_time <= start_time_obj <= operational_end_time
                 isEndTimeValid = operational_start_time <= end_time_obj <= operational_end_time
+
                 if not isStartTimeValid or not isEndTimeValid:
                     check_results["flight_times"].append(
                         f"Flight times ({start_time_str} - {end_time_str}) must be between 09:00 and 17:30.")
@@ -317,10 +337,12 @@ class FlightDataValidator:
         if self._is_processing:
             raise RuntimeError("Another validation process is already in progress")
         self._is_processing = True
+
         mcp_client = None
         ipfs_client = None
         compliance_messages: List[str] = []
         has_critical_errors = False
+
         try:
             # 1. Initialize state
             self._reset_state()
@@ -356,7 +378,7 @@ class FlightDataValidator:
                 mcp_result = {"status": "skipped", "message": "flightAreaCenter is missing or not in expected string/object format. Cannot perform NFZ validation."}
                 self._state.mcp_results = mcp_result
                 has_mcp_errors = True
-
+            
             has_critical_errors = has_deterministic_errors or has_mcp_errors
             self._state.is_critically_compliant = not has_critical_errors
 
@@ -382,7 +404,6 @@ class FlightDataValidator:
             3. Provides clear, actionable recommendations (if any issues)
             4. Notes any conflicting or ambiguous findings
             5. Highlights any validation errors or missing information encountered by the validators.
-
             Structure your response with 'Answer:' followed by the comprehensive report.
             """
 
@@ -392,7 +413,9 @@ class FlightDataValidator:
             try:
                 regulations_path = os.path.join(os.path.dirname(__file__), "regulations.txt")
                 print(f"Loading regulations from: {regulations_path}", file=sys.stderr)
-                documents = await LlamaParse(result_type="text", verbose=False).aload_data(regulations_path)
+                # Redirect stdout during LlamaParse execution to prevent unwanted output
+                with contextlib.redirect_stdout(sys.stderr):
+                    documents = await LlamaParse(result_type="text", verbose=False).aload_data(regulations_path)
                 index = VectorStoreIndex.from_documents(documents)
                 query_engine = index.as_query_engine()
                 query_tool = QueryEngineTool.from_defaults(
@@ -430,7 +453,6 @@ class FlightDataValidator:
                 validation_package = self._create_validation_package(
                     self._state.flight_data, deterministic_results, mcp_result, self._state.ai_report
                 )
-
                 # 10. Serialize the combined data
                 print("Serializing validation package...", file=sys.stderr)
                 serialized_data = self.serialize_validation_package(validation_package)
@@ -463,13 +485,13 @@ class FlightDataValidator:
                 if data_hash_hex:
                     print("Storing mapping in database...", file=sys.stderr)
                     try:
-                        # Call the modified store_flight_data with None for ip_id and license_terms_id initially
-                        self.store_flight_data(data_hash_hex, ipfs_cid if ipfs_cid else "UPLOAD_FAILED", None, None)
+                        # Call the modified store_flight_data with None for ip_id, license_terms_id, and minted_token_id initially
+                        self.store_flight_data(data_hash_hex, ipfs_cid if ipfs_cid else "UPLOAD_FAILED", None, None, None)
                         print("Mapping stored.", file=sys.stderr)
                     except Exception as db_error:
                         sys.stderr.write(f"Error storing mapping in database: {db_error}\n")
                         print(f"Error storing mapping in database: {db_error}", file=sys.stderr)
-
+                
                 # 14. Prepare final success result
                 result = {
                     "compliance_messages": compliance_messages,
@@ -482,6 +504,7 @@ class FlightDataValidator:
                     }
                 }
                 return result
+
             else: # has_critical_errors is True
                 print("Critical errors found. Skipping serialization, hashing, IPFS upload, and DB storage.", file=sys.stderr)
                 result = {
@@ -496,6 +519,7 @@ class FlightDataValidator:
                     }
                 }
                 return result
+
         except Exception as e:
             print(f"Unexpected error in async processing: {e}", file=sys.stderr)
             final_compliance_messages = [f"Unexpected processing error: {str(e)}"]
@@ -520,7 +544,6 @@ class FlightDataValidator:
     async def main(self):
         """Main entry point for the script. Handles different actions based on input."""
         print("Script started.", file=sys.stderr)
-        # Initialize _db_conn at the top level of main to ensure it's closed in finally
         self._db_conn = None
         try:
             input_json = sys.stdin.read()
@@ -528,53 +551,61 @@ class FlightDataValidator:
             if not input_json:
                 raise ValueError("No input JSON received.")
             parsed_input = json.loads(input_json)
-
-            # Check if the input specifies a specific action
             action = parsed_input.get("action")
+
             if action == "update_story_protocol_details":
-                # Handle updating story protocol details
                 data_hash = parsed_input.get("dataHash")
                 ip_id = parsed_input.get("ipId")
                 license_terms_id = parsed_input.get("licenseTermsId")
-                if not data_hash or not ip_id or license_terms_id is None:
+                minted_token_id = parsed_input.get("mintedTokenId") # Get minted_token_id
+                if not data_hash or not ip_id or license_terms_id is None or minted_token_id is None:
                     raise ValueError("Missing required parameters for update_story_protocol_details action.")
-                # Ensure database connection is initialized for this action
                 self._db_conn = self._init_db()
-                result = await self.update_story_protocol_details(data_hash, ip_id, license_terms_id)
-                print(json.dumps(result)) # Output result to stdout
+                result = await self.update_story_protocol_details(data_hash, ip_id, license_terms_id, minted_token_id)
+                print(json.dumps(result))
+
             elif action == "get_story_protocol_details_by_hash":
                 data_hash = parsed_input.get("dataHash")
                 if not data_hash:
                     raise ValueError("Missing dataHash for get_story_protocol_details_by_hash action.")
-                self._db_conn = self._init_db() # Init DB here
+                self._db_conn = self._init_db()
                 details = self.get_flight_data_by_hash(data_hash)
                 if details:
-                    # Ensure licenseTermsId is a standard int for JSON serialization if it came as BigInt.
-                    # SQLite stores INTEGER, so it should be fine.
                     if details.get("licenseTermsId") is not None:
                         details["licenseTermsId"] = int(details["licenseTermsId"])
                     print(json.dumps({"status": "success", "details": details}))
                 else:
                     print(json.dumps({"status": "error", "message": f"No details found for dataHash: {data_hash}"}))
-            elif action == "get_story_protocol_details_by_hashes": # New action to get details for multiple hashes
+
+            elif action == "get_story_protocol_details_by_hashes":
                 data_hashes = parsed_input.get("dataHashes")
                 if not data_hashes or not isinstance(data_hashes, list):
                     raise ValueError("Missing or invalid dataHashes for get_story_protocol_details_by_hashes action.")
                 self._db_conn = self._init_db()
                 details_list = self.get_flight_data_by_hashes(data_hashes)
-                # Ensure licenseTermsId is a standard int for JSON serialization if it came as BigInt.
                 for details in details_list:
                     if details.get("licenseTermsId") is not None:
                         details["licenseTermsId"] = int(details["licenseTermsId"])
                 print(json.dumps({"status": "success", "details": details_list}))
+
+            elif action == "get_ipfs_content_by_cid": # New action handler
+                ipfs_cid = parsed_input.get("ipfsCid")
+                if not ipfs_cid:
+                    raise ValueError("Missing ipfsCid for get_ipfs_content_by_cid action.")
+                ipfs_content = await self.get_ipfs_content(ipfs_cid)
+                if ipfs_content:
+                    print(json.dumps({"status": "success", "content": ipfs_content}))
+                else:
+                    print(json.dumps({"status": "error", "message": f"Failed to retrieve content for IPFS CID: {ipfs_cid}"}))
+
             else:
-                # Assume standard validation/processing flow if no action specified
-                flight_data = parsed_input # Assume the input is flight data for validation
-                # Ensure database connection is initialized for the validation flow as well
+                flight_data = parsed_input
                 self._db_conn = self._init_db()
                 result = await self.validate_and_process_flight_data(flight_data)
                 print(json.dumps(result))
+
             print("Script finished successfully.", file=sys.stderr)
+
         except (json.JSONDecodeError, ValueError) as e:
             error_response = {"status": "error", "message": f"Input processing error: {str(e)}", "dataHash": None, "ipfsCid": None, "is_critically_compliant": False}
             print(json.dumps(error_response), file=sys.stderr)
@@ -587,12 +618,9 @@ class FlightDataValidator:
             print(json.dumps(error_response))
             sys.exit(1)
         finally:
-            # Clean up database connection if it was initialized in main
             if self._db_conn:
                 self._db_conn.close()
                 self._db_conn = None
-            # MCP client cleanup is handled within validate_and_process_flight_data
 
-# The __main__ block remains the same, handling the asyncio run
 if __name__ == "__main__":
     asyncio.run(FlightDataValidator().main())
