@@ -980,6 +980,7 @@ export default function RegisterFlightPage() {
                   currentLogIndex={currentLogIndex}
                   totalLogs={simulatedDgip.length}
                   isSimulating={isSimulating}
+                  simulatedDgip={simulatedDgip} // NEW: Pass the full array for path plotting
                 />
               </div>
             </>
