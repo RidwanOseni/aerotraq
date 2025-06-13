@@ -22,7 +22,6 @@ interface FlightRecordForMarketplace {
 
 export default function MarketplacePreviewPage() {
     const { isConnected, address } = useAccount();
-
     const [listedFlights, setListedFlights] = useState<FlightRecordForMarketplace[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [simulatingPaymentFlightId, setSimulatingPaymentFlightId] = useState<string | null>(null);
@@ -49,6 +48,7 @@ export default function MarketplacePreviewPage() {
                 }
 
                 const result = await response.json();
+
                 if (result.status === 'success' && Array.isArray(result.flights)) {
                     // Filter to only show flights that have been tokenized (have an ipId and mintedTokenId)
                     const tokenizedFlights = result.flights.filter(
@@ -58,6 +58,7 @@ export default function MarketplacePreviewPage() {
                         isListed: false, // Initialize as not listed
                         isSimulatingPayment: false // Initialize payment simulation status
                     })) as FlightRecordForMarketplace[];
+
                     setListedFlights(tokenizedFlights);
                 } else {
                     throw new Error(result.message || "Received unexpected response format from backend.");
@@ -88,15 +89,7 @@ export default function MarketplacePreviewPage() {
             )
         );
         toast.success(`Your DGIP (Data Hash: ${dataHash.substring(0, 10)}...) has been successfully listed on the simulated marketplace!`);
-
-        // Simulate a brief loading period
-        setTimeout(() => {
-            setListedFlights((prevFlights) =>
-                prevFlights.map((flight) =>
-                    flight.initialDataHash === dataHash ? { ...flight, isListed: false } : flight
-                )
-            );
-        }, 3000); // Reset "listing" state after 3 seconds for demo purposes
+        // Removed setTimeout to make the 'isListed' status persist until explicitly unlisted (if unlisting is implemented later).
     };
 
     // Royalty Simulation Functionality (moved from flight-history)
@@ -136,13 +129,12 @@ export default function MarketplacePreviewPage() {
         }
     };
 
-
     if (!isConnected) {
         return (
-            <div className="flex flex-col items-center justify-center min-h-[calc(100vh-200px)] text-center px-4">
+            <div className="flex flex-col items-center justify-center min-h-[calc(100vh-80px)] p-4">
                 <Card className="w-full max-w-md">
                     <CardHeader>
-                        <CardTitle className="text-2xl font-bold">Connect Wallet to View Marketplace</CardTitle>
+                        <CardTitle className="text-xl">Connect Wallet to View Marketplace</CardTitle>
                         <CardDescription>
                             Please connect your wallet to see your tokenized IP Assets on the simulated marketplace.
                         </CardDescription>
@@ -154,94 +146,98 @@ export default function MarketplacePreviewPage() {
 
     if (isLoading) {
         return (
-            <div className="flex flex-col items-center justify-center min-h-[calc(100vh-200px)] text-center px-4">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                <p className="mt-2 text-muted-foreground">Loading marketplace data...</p>
+            <div className="flex flex-col items-center justify-center min-h-[calc(100vh-80px)] p-4">
+                <Loader2 className="h-8 w-8 animate-spin text-gray-500" />
+                <p className="mt-4 text-gray-600">Loading marketplace data...</p>
             </div>
         );
     }
 
     return (
         <div className="container mx-auto p-4 sm:p-6 lg:p-8">
-            <Card className="w-full">
+            <Card className="w-full max-w-3xl mx-auto mb-6">
                 <CardHeader>
                     <CardTitle className="text-2xl font-bold">Your Tokenized DGIP Assets (Marketplace Preview)</CardTitle>
                     <CardDescription>
                         Demonstrating the commercial value and transactional capabilities of your IP Assets.
                     </CardDescription>
                 </CardHeader>
-                <CardContent>
-                    {listedFlights.length === 0 ? (
-                        <p className="text-center text-muted-foreground">No tokenized flights found to list. Register and tokenize a new flight (Step 4) to see it here!</p>
-                    ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {listedFlights.map((flight) => (
-                                <Card key={flight.initialDataHash} className="p-4">
-                                    <CardTitle className="text-xl">
-                                        {flight.droneName} DGIP ({flight.flightDate})
-                                    </CardTitle>
-                                    <CardContent className="mt-2 text-sm space-y-1">
-                                        <p><span className="font-semibold">Initial Data Hash:</span> {flight.initialDataHash.substring(0, 10)}...</p>
-                                        {flight.ipfsCid && flight.ipfsCid !== "UPLOAD_FAILED" && (
-                                            <p>
-                                                <span className="font-semibold">DGIP IPFS CID:</span>{" "}
-                                                <a
-                                                    href={`https://ipfs.io/ipfs/${flight.ipfsCid}`}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="text-blue-500 hover:underline"
-                                                >
-                                                    {flight.ipfsCid}
-                                                </a>
-                                            </p>
-                                        )}
-                                        <div className="mt-2 border-t pt-2">
-                                            <h3 className="font-semibold text-md">Story Protocol Details:</h3>
-                                            <p>
-                                                <span className="font-semibold">IP Asset ID:</span>{" "}
-                                                <a
-                                                    href={`https://aeneid.explorer.story.foundation/ip/${flight.ipId}`}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="text-blue-500 hover:underline"
-                                                >
-                                                    {flight.ipId.substring(0, 8)}...{flight.ipId.slice(-6)} (View on Explorer)
-                                                </a>
-                                            </p>
-                                            <p><span className="font-semibold">License Terms ID:</span> {flight.licenseTermsId}</p>
-                                            <p><span className="font-semibold">Minted NFT Token ID:</span> {flight.mintedTokenId}</p>
-                                        </div>
-
-                                        <div className="mt-4 space-y-2">
-                                            <Button
-                                                onClick={() => handleListForSale(flight.initialDataHash)}
-                                                disabled={flight.isListed}
-                                                className="w-full"
-                                            >
-                                                {flight.isListed ? 'Listed (Simulated)' : 'Simulate Listing for Sale'}
-                                            </Button>
-
-                                            <Button
-                                                onClick={() => handleSimulateRoyalty(flight.ipId, flight.licenseTermsId)}
-                                                disabled={simulatingPaymentFlightId === flight.ipId}
-                                                className="w-full"
-                                            >
-                                                {simulatingPaymentFlightId === flight.ipId ? (
-                                                    <>
-                                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Simulating Payment...
-                                                    </>
-                                                ) : (
-                                                    "Simulate Royalty Payment"
-                                                )}
-                                            </Button>
-                                        </div>
-                                    </CardContent>
-                                </Card>
-                            ))}
-                        </div>
-                    )}
-                </CardContent>
             </Card>
+
+            {listedFlights.length === 0 ? (
+                <Card className="w-full max-w-3xl mx-auto">
+                    <CardContent className="p-6 text-center text-gray-600">
+                        No tokenized flights found to list. Register and tokenize a new flight (Step 4) to see it here!
+                    </CardContent>
+                </Card>
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {listedFlights.map((flight) => (
+                        <Card key={flight.initialDataHash} className="flex flex-col justify-between">
+                            <CardHeader>
+                                <CardTitle className="text-lg">
+                                    {flight.droneName} DGIP ({flight.flightDate})
+                                </CardTitle>
+                                <CardDescription className="text-sm text-gray-500">
+                                    Initial Data Hash: {flight.initialDataHash.substring(0, 10)}...
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-2 text-sm text-gray-700">
+                                {flight.ipfsCid && flight.ipfsCid !== "UPLOAD_FAILED" && (
+                                    <p className="text-sm text-gray-500 mt-1">
+                                        DGIP IPFS CID:{" "}
+                                        <a
+                                            href={`https://ipfs.io/ipfs/${flight.ipfsCid}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-blue-500 hover:underline break-all" // Added break-all here for text wrapping
+                                        >
+                                            {flight.ipfsCid}
+                                        </a>
+                                    </p>
+                                )}
+                                <p className="font-semibold">Story Protocol Details:</p>
+                                <p>
+                                    IP Asset ID:{" "}
+                                    <a
+                                        href={`https://aeneid.explorer.story.foundation/ip/${flight.ipId}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-blue-500 hover:underline break-all" // Added break-all here for text wrapping
+                                    >
+                                        {flight.ipId.substring(0, 8)}...{flight.ipId.slice(-6)} (View on Explorer)
+                                    </a>
+                                </p>
+                                <p>License Terms ID: {flight.licenseTermsId}</p>
+                                <p>Minted NFT Token ID: {flight.mintedTokenId}</p>
+                            </CardContent>
+                            <CardContent className="mt-4 flex flex-col gap-2">
+                                <Button
+                                    onClick={() => handleListForSale(flight.initialDataHash)}
+                                    disabled={flight.isListed}
+                                    className={`w-full ${flight.isListed ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-blue-500 hover:bg-blue-600 text-white'}`} // Enhanced button styling
+                                >
+                                    {flight.isListed ? 'Listed (Simulated)' : 'Simulate Listing for Sale'}
+                                </Button>
+                                <Button
+                                    onClick={() => handleSimulateRoyalty(flight.ipId, flight.licenseTermsId)}
+                                    disabled={simulatingPaymentFlightId === flight.ipId}
+                                    className="w-full bg-purple-500 hover:bg-purple-600 text-white"
+                                >
+                                    {simulatingPaymentFlightId === flight.ipId ? (
+                                        <>
+                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                            Simulating Payment...
+                                        </>
+                                    ) : (
+                                        "Simulate Royalty Payment"
+                                    )}
+                                </Button>
+                            </CardContent>
+                        </Card>
+                    ))}
+                </div>
+            )}
         </div>
     );
 }
