@@ -1,116 +1,153 @@
-# Team9EncodeDeAIBootcamp2025-UAVguardChain
-Bootcamp final project
+Here is an adjusted version of your readme.txt file for the Aerotraq drone app, incorporating details and insights from the provided sources.
+# 🛰️ Aerotraq - Decentralized Drone Registry, Simulation, and IP Monetization Platform
 
-<img width="1547" alt="droneAI_web3" src="https://github.com/user-attachments/assets/c2cb6c88-33d7-4ac7-83f6-8299de165e24" />
+> Surreal World Asset Buildathon Q2 2025
 
-## Step-by-Step Description
+## 🚀 Overview
 
-### The user/pilot opens the app
-The system (with AI agents) requests all necessary flight information:  
-drone specifications, flight plan, date, time, duration, location, etc.
+Aerotraq is a cutting-edge decentralized drone management and simulation platform built with Next.js, TypeScript, and Leaflet, featuring deep smart contract and AI integration. It empowers users to **register drones**, **track simulated flights via DGIP (Drone Generated Identity Protocol) logs**, and **tokenize drone-generated data as Intellectual Property (IP) assets** on the blockchain for monetization and transparent record-keeping.
 
-### AI validates and prepares flight registration
-The AI agent checks data consistency and completeness.
+Our platform directly addresses critical challenges in modern drone technology: **traceability**, **secure flight validation**, and **decentralized IP management and monetization**. By leveraging AI for compliance checks and blockchain for immutable records and royalty distribution, Aerotraq ensures urban airspace safety, facilitates scalable UAV adoption, and opens new avenues for data-driven revenue generation for drone operators.
 
-It may suggest recommendations to comply with regulations (if applicable).
+## 🌟 Features
 
-### Public blockchain registration
-The AI sends flight data to the registration smart contract on the blockchain.
+*   **Decentralized Flight Registration**:
+    *   Users submit detailed flight plans, which undergo **AI-powered compliance validation** (checking against regulations and No-Fly Zones using LlamaIndex and OpenAIP's MCP server) [1-6].
+    *   Compliant flight data is then serialized, its Keccak256 hash is calculated, and the data is **uploaded to IPFS** for decentralized storage [7-9].
+    *   The flight plan hash is subsequently **registered on-chain** via a custom smart contract (`0xbf9da8c38e15105f0ada872ea78512991d6a601c` [10, 11]) to ensure immutability and uniqueness [12, 13].
 
-A unique identifier is generated and stored immutably, making it universally accessible.
+*   **Secure DGIP Log Simulation & On-Chain Linking**:
+    *   The platform simulates **real-time DGIP (Drone Generated Identity Protocol) telemetry logs**, including location, altitude, speed, heading, and battery, dynamically displaying the flight path on a map [14-26].
+    *   After simulation, the DGIP log data is processed, its hash is calculated, and it is **uploaded to IPFS** [27-29].
+    *   The DGIP data hash is then **linked on-chain** to the initial flight registration record in the smart contract, creating a verifiable chain of custody for generated flight data [30-32].
 
-### Option to purchase decentralized insurance
-The AI offers the user the option to buy a decentralized insurance policy for the flight.
+*   **Story Protocol IP Asset Tokenization & Monetization**:
+    *   The platform integrates with **Story Protocol's Aeneid Testnet (Chain ID 1315)** [33-37] to transform drone flight data into **tokenized Intellectual Property (IP) Assets** [38, 39].
+    *   This involves registering **Programmable IP License (PIL) Terms** (e.g., commercial remix terms allowing revenue sharing) and **minting an NFT** from an SPG (Story Protocol Graph) NFT contract, attaching metadata that points to the IPFS CIDs of the initial flight data and DGIP logs [38-44].
+    *   Users can **claim accrued royalties in $WIP (Story Protocol's native token)** generated from their tokenized IP Assets [35, 45-49]. The system checks for the existence of a royalty vault for proper revenue distribution [50-52].
+    *   Supports **simulation of royalty payments**, demonstrating the full monetization lifecycle for DGIP assets [53-55].
 
-It collects relevant information and facilitates the payment in cryptocurrency via the insurance smart contract.
+*   **Enhanced User Wallet Experience (Tomo Integration)**:
+    *   Seamless wallet connection with **social login capabilities** through **TomoEVMKit**, wrapping the existing Wagmi setup for improved user adoption [56-58].
+    *   Utilizes Tomo's key management, which combines **OAuth for convenience** and **Trusted Execution Environment (TEE) for robust private key security** [56, 59, 60].
+    *   Provides **in-app $WIP management services** such as SWAP (token exchange) and ONRAMP (token purchase via card), streamlining cryptocurrency interactions directly within the application [45, 61, 62].
 
-Once completed, the blockchain records the transaction, and the user receives digital proof of coverage.
+*   **Live Location Tracking using Leaflet.js**: Visualizes simulated drone paths and current positions on an interactive map [24-26, 63-67].
+*   **Security-first Design**: Implements robust security measures through smart contract interactions and Tomo's advanced key management.
+*   **Developer-friendly Architecture**: Features modular design, strong typing with TypeScript and Zod, and optimized dynamic imports for performance.
 
-### Claims process (in case of an incident)
-If an incident/accident occurs, the user files a claim within the app.
+## 🛠️ Tech Stack
 
-The AI gathers evidence (flight data, photos, location, witness statements, etc.)  
-and submits it to the claims smart contract.
+*   **Frontend**: Next.js 14, React 18, TailwindCSS
+*   **Mapping & Visualization**: Leaflet.js (`^1.9.4` [68]), React-Leaflet (`^4.1.0` [68])
+*   **Type Safety**: TypeScript (`^5` [69]), Zod (`^3.24.2` [69])
+*   **Blockchain Integration**:
+    *   Wagmi (`^2.14.16` [69]), Viem (`^2.30.6` [69]), Ethers.js (`^6.13.5` [68]) (via Wagmi adapters for incremental migration/third-party libraries [70]).
+    *   Story Protocol Core SDK (`@story-protocol/core-sdk` `^1.3.1` [68]).
+    *   Custom DroneFlight Smart Contract (address: `0xbf9da8c38e15105f0ada872ea78512991d6a601c` [10, 11]).
+    *   Network: Story Aeneid Testnet (Chain ID `1315`) [33-37].
+*   **Wallet Integration**: TomoEVMKit (`@tomo-inc/tomo-evm-kit` `^0.0.47` [68]).
+*   **AI & Backend Logic (Python)**:
+    *   LlamaIndex (`llama_index.core`) [71, 72].
+    *   OpenAI (`openai`) [71, 72].
+    *   MCP (`mcp` `^1.4.2` [68]) for OpenAIP integration (e.g., NFZ validation) [73, 74].
+    *   aioipfs (`aioipfs`) for IPFS interactions [72, 75].
+    *   sqlite3 for local database persistence of flight and IP asset mappings [74, 76].
+*   **UI Components**: ShadCN, Radix UI
 
-The blockchain registers the claim and opens a “challenge” period during which  
-other agents (or humans) can contest or verify the information to prevent fraud.
+## 🧪 How to Run Locally
 
-### Review and compensation
-If the claim is uncontested (or valid after a failed challenge), the smart contract releases compensation to the pilot.
+1.  **Clone the Repository**:
+    ```bash
+    git clone https://github.com/your-username/drone-registry.git
+    cd drone-registry
+    ```
 
-If the claim is contested and proven invalid, no compensation is issued.
+2.  **Install Node.js Dependencies**:
+    ```bash
+    npm install
+    # Ensure peer dependencies for react-leaflet are also installed:
+    npm install react react-dom leaflet
+    # Install TypeScript definitions for Leaflet:
+    npm install -D @types/leaflet
+    # Install core-js-pure, a dependency for TomoEVMKit if using Next.js:
+    npm install core-js-pure
+    ```
 
-The final resolution (payment or rejection) is recorded on the blockchain.
-    
-![UAVguardCHAIN-2025-04-13-112304](https://github.com/user-attachments/assets/68d13bef-0298-40ea-a368-436e306d7c2a)
+3.  **Set up your `.env` file**: Create a `.env.local` file in the root directory with the following environment variables.
+    ```ini
+    # --- Frontend/Next.js Related ---
+    NEXT_PUBLIC_MAPBOX_API_KEY=your_mapbox_api_key_here # (Optional, if using Mapbox tiles instead of OpenStreetMap)
+    NEXT_PUBLIC_BACKEND_URL=http://localhost:3000 # Your Next.js app URL
 
+    # --- Tomo EVM Kit Configuration ---
+    NEXT_PUBLIC_TOMO_CLIENT_ID=YOUR_TOMO_CLIENT_ID # Obtain from your Tomo developer account [77-79]
+    NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=YOUR_WALLETCONNECT_PROJECT_ID # Obtain from WalletConnect Cloud [77-79]
 
-Architecture:
+    # --- Story Protocol Specific ---
+    SPG_NFT_CONTRACT_ADDRESS=0xYourSpgNftContractAddressHere # Address of an SPG NFT collection you own/control, used for minting IP Assets [44]
 
-       +------------------------------------------+
-       |               User Interface             |
-       |              (Next.js Frontend)          |
-       +------------------------------------------+
-                         | 
-                         v
-          +--------------------------------------------+
-          |               Backend Server               |
-          |           (Node.js API / Python)           |
-          +--------------------------------------------+
-               |                     |                   |
-               v                     v                   v
-     +------------------+   +---------------------+    +---------------------+
-     |     AI Agent     |   |   Blockchain Layer   |    |     RAG System      |
-     | (LangChain /     |   | (Solidity Smart      |    | (LangChain /        |
-     |  LlamaIndex)     |   |  Contracts)          |    |  LlamaIndex)        |
-     +------------------+   +---------------------+    +---------------------+
-         |                |                         |       
-         v                v                         v
-       +-------------------+  +--------------------+   +-------------------------+
-       | Flight Data Store  |  | Flight Registry    |   | Insurance Smart         |
-       | (Text File / DB)   |  | Contract (Solidity)|   | Contract (Solidity)     |
-       +-------------------+  +--------------------+   +-------------------------+
-                                   |                         |
-                                   v                         v
-                             +---------------------+   +-------------------------+
-                             | Claims Smart        |   | Transaction Confirmation |
-                             | Contract (Solidity) |   | (Blockchain interaction) |
-                             +---------------------+   +-------------------------+
-More details to the smart contracts
-/*
-// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+    # --- Python Backend (AI/MCP/IPFS) Configuration ---
+    # Python executable command (e.g., 'python', 'python3'). Set if 'python' isn't your default.
+    PYTHON_EXECUTABLE=python
+    # API key for OpenAIP (required for NFZ validation via MCP).
+    OPENAIP_API_KEY=YOUR_OPENAIP_API_KEY_HERE
+    # Path to the OpenAIP MCP server executable (e.g., Node.js index.js or Python script).
+    # This path is relative to your project root.
+    OPENAIP_SERVER_PATH=./backend/mcp-server/openaip-mcp-server/build/index.js # Example path
+    # Path for the SQLite database. Defaults to 'flight_data.db' if not set.
+    DB_PATH=./flight_data.db
+    ```
 
-contract DroneRegistry {
-    uint256 public droneId;
+4.  **Python Backend Setup**:
+    *   Ensure you have Python 3 installed.
+    *   Install Python dependencies for the backend scripts:
+        ```bash
+        pip install mcp openai aioipfs eth-hash python-dotenv llama-index-core llama-index-llms-openai llama-index-readers-llama-parse web3
+        ```
+    *   The `llama_validator.py` script automatically initializes an SQLite database (`flight_data.db` by default) for storing flight mappings and IP details [80].
 
-    event RegisteredFlight(uint256 indexed droneId, address indexed registrant);
+5.  **Configure Next.js**:
+    *   **Transpile Packages**: Ensure `next.config.ts` includes `transpilePackages` for `wagmi`, `viem`, `@tomo-inc/tomo-evm-kit`, etc., to resolve CommonJS/ESM interoperability issues [81].
+    *   **TypeScript Configuration**: In `tsconfig.json`, ensure `module` and `moduleResolution` are set to `"NodeNext"` [82].
 
-    constructor() {
-        droneId = 0;
-    }
+6.  **Load Leaflet CSS**: Ensure `leaflet/dist/leaflet.css` is imported in your `globals.css` file [83].
 
-    function registerFlight() public {
-        droneId += 1;
-        emit RegisteredFlight(droneId, msg.sender);
-    }
-}
+7.  **Run the Application**:
+    ```bash
+    npm run dev
+    ```
+    Your application should now be running locally, typically on `http://localhost:3000`.
 
-*/
-I will be explaining this project in details, that is the smart contract
-1. We have the license Identifier
-2 We have our state variable, which allows users to access it
-3 Then we have our user-defined variable event that is used to be able to call out the value emitted to regulate the movement in the smart contract or what the Engineer is doing
-//  event RegisteredFlight(uint256 indexed droneId, //address indexed registrant);
-6    Then, to create a constructor that is  called only once for the owner
-7   Then the function that we called a local variable was assigned to a value
+**Important Notes for Local Development:**
+*   **Hydration Errors**: The `WagmiProviderWrapper.tsx` explicitly sets `ssr: false` for `TomoEVMKitProvider` to address potential React hydration errors caused by server-side rendering discrepancies [84, 85].
+*   **Leaflet Icons**: Default Leaflet marker icons may not appear due to bundling issues. The `dgip-simulation-display.tsx` component includes a client-side fix (or expects a global configuration) to correctly load these icons [65, 84, 86-88].
 
-   
-//  function registerFlight() public {
-  //      droneId += 1;
-        emit RegisteredFlight(droneId, msg.sender);
-  //  }
-  Then, we have to emit to tell the user who will be using the Dapp that we have only the droneID and him/her as the owner.
+## 💡 Problem Statement
 
+The rapid rise of Unmanned Aerial Vehicles (UAVs) introduces significant challenges for airspace management and accountability. How can we ensure that drone operations are:
 
+*   **Properly Registered**: Establishing a verifiable record of drone flights.
+*   **Compliant with Regulations**: Ensuring flights adhere to No-Fly Zones and other legal frameworks.
+*   **Transparently Logged**: Providing immutable records of flight activity.
+*   **Monetizable**: Enabling drone operators to generate revenue from their generated data.
+
+Aerotraq introduces a practical solution using **AI-powered, blockchain-backed compliance**, **secure DGIP logs**, and **Story Protocol's IP Asset tokenization** to create a transparent, verifiable, and economically viable ecosystem for drone data.
+
+## 📈 Future Enhancements
+
+*   Implementing a modular compliance system to adapt to different regional regulations.
+*   Developing a multi-user dashboard for comprehensive fleet monitoring and management.
+*   Expanding on Tomo integration for advanced $WIP token management, including deeper SWAP and ONRAMP functionalities, and potentially direct royalty payments through Tomo's internal wallet services.
+*   Exploring advanced IP Asset licensing models on Story Protocol for varied commercial use cases of DGIP data.
+*   Integration with real-time drone telemetry for live flight tracking beyond simulation.
+
+## 🧠 Team
+
+*   Ridwan Oseni - Fullstack/AI Web developer
+*   Ioana - Fullstack/AI Web developer
+
+## 📜 License
+
+MIT License – free to use, fork, and improve.
 
