@@ -1,37 +1,39 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import Providers from "./providers"; // Import the Providers component
-import Navbar from "@/components/navbar"; // Import the Navbar component
-import { Toaster } from "@/components/ui/sonner"; // Import the Toaster component from shadcn/ui's Sonner module [9]
+import Providers from "./WagmiProviderWrapper"; // Ensure this path correctly points to your WagmiProviderWrapper.tsx
+import Navbar from "@/components/navbar";
+import { Toaster } from "@/components/ui/sonner";
 
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Drone Registry", // [3]
-  description: "Register your drone flights and manage insurance claims", // [3]
+  title: "Drone Registry",
+  description: "Register your drone flights and manage insurance claims",
 };
 
 export default function RootLayout({
-  children, // [4]
+  children,
 }: {
-  children: React.ReactNode; // [4]
+  children: React.ReactNode;
 }) {
   return (
-    // Wrap everything inside Providers [4]
-    <Providers>
-      {/* Apply font class [4] */}
-      <html lang="en" className={inter.className}>
-        {/* Head content can go here */}
-        <head />
-        <body>
+    <html lang="en">
+      <head>
+        <script
+          src={`https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}`}
+          async
+          defer
+        />
+      </head>
+      <body className={inter.className}>
+        {/* Wrap Navbar and children inside Providers to ensure Wagmi context is available */}
+        <Providers>
           <Navbar />
-          <main>{children}</main>
-          {/* Add the Toaster component here */}
-          {/* This component is where toast notifications will be rendered */}
-          <Toaster />
-        </body>
-      </html>
-    </Providers>
+          {children}
+        </Providers>
+        <Toaster /> {/* Toaster should typically be outside the provider, but still within the body */}
+      </body>
+    </html>
   );
 }

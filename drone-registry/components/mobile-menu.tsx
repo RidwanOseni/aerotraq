@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
@@ -27,14 +26,18 @@ export function MobileMenu({ items }: MobileMenuProps) {
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
-        <Button variant="ghost" size="icon" className="md:hidden">
-          <Menu className="h-5 w-5" />
-          <span className="sr-only">Toggle menu</span>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="lg:hidden"
+          aria-label="Toggle menu"
+        >
+          <Menu className="h-6 w-6" />
         </Button>
       </SheetTrigger>
-      <SheetContent side="right" className="w-[240px] sm:w-[300px]">
-        <nav className="flex flex-col gap-4 mt-6">
-          {items.map((item) => {
+      <SheetContent side="left" className="w-[300px] sm:w-[400px]">
+        <nav className="flex flex-col gap-1 p-4">
+          {items?.map((item) => { // FIX: Added optional chaining here
             const isActive = pathname === item.href
             return (
               <Link
@@ -56,4 +59,3 @@ export function MobileMenu({ items }: MobileMenuProps) {
     </Sheet>
   )
 }
-

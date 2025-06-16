@@ -1,69 +1,65 @@
 "use client";
 
-import { WagmiProvider } from 'wagmi';
-import { createConfig, http, createStorage } from '@wagmi/core';
-import { injected } from 'wagmi/connectors';
-import { defineChain } from 'viem'; // Import defineChain from viem
+import { WagmiProvider } from "wagmi";
+import { defineChain } from "viem";
+import { getDefaultConfig, TomoEVMKitProvider } from "@tomo-inc/tomo-evm-kit";
+import "@tomo-inc/tomo-evm-kit/styles.css";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 // Define the custom Aeneid Testnet chain
 const aeneid = defineChain({
-  id: 1315, // Chain ID for Story Aeneid Testnet 
-  name: 'Story Aeneid Testnet', // Network Name 
+  id: 1315, // Chain ID for Story Aeneid Testnet
+  name: 'Story Aeneid Testnet', // Network Name
   nativeCurrency: {
     decimals: 18,
-    name: 'IP', // The faucet provides IP tokens 
-    symbol: 'IP', // The faucet provides IP tokens 
+    name: 'IP', // The faucet provides IP tokens
+    symbol: 'IP', // The faucet provides IP tokens
   },
   rpcUrls: {
     default: {
-      http: ['https://aeneid.storyrpc.io'], // Official RPC URL for Aeneid Testnet 
+      http: ['https://aeneid.storyrpc.io'], // Official RPC URL for Aeneid Testnet
     },
   },
   blockExplorers: {
     default: {
       name: 'Storyscan',
-      url: 'https://aeneid.storyscan.io', // Official Blockscout Explorer URL 
+      url: 'https://aeneid.storyscan.io', // Official Blockscout Explorer URL
     },
   },
 });
 
-// Custom no-op storage for SSR fallback
-// It provides the necessary methods (getItem, setItem, removeItem) but does nothing,
-// making it safe to use in SSR environments where `window.sessionStorage` is not available
-const noopStorage = {
-  getItem: (_key: string) => null,
-  setItem: (_key: string, _value: string) => { /* do nothing */ },
-  removeItem: (_key: string) => { /* do nothing */ },
-};
-
-// Define the Wagmi configuration
-const config = createConfig({
-  // Define the chains supported by the app
-  chains: [aeneid], // Replaced polygonAmoy with custom aeneid chain
-  // Define the connectors available for connecting wallets
-  connectors: [injected()],
-  // Define the transports (RPC URLs) for interacting with the chains
-  transports: {
-    [aeneid.id]: http(aeneid.rpcUrls.default.http), // Use the RPC URL from the aeneid chain definition
-  },
-  // Configure storage to use sessionStorage with SSR fallback
-  // The storage parameter persists Config's State between sessions
-  storage: createStorage({
-    storage: typeof window !== 'undefined' ? window.sessionStorage : noopStorage,
-  }),
-  ssr: true, // Flag indicating server-side rendering environment. Necessary for Next.js App Router
+// Tomo's getDefaultConfig handles most Wagmi configurations
+const config = getDefaultConfig({
+  appName: "Aerotraq", // Your application name
+  clientId: process.env.NEXT_PUBLIC_TOMO_CLIENT_ID as string, // Client ID from I-detail.txt [1]
+  projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID as string, // WalletConnect Project ID from I-detail.txt [1]
+  chains: [aeneid], // Your custom Aeneid chain
+  // FIX: Set `ssr` to `false` to address potential React hydration errors.
+  // The error analysis indicates that server-side rendering discrepancies
+  // can cause hydration issues. Setting this to false can help prevent
+  // client-server HTML mismatches at the provider level, ensuring the
+  // client takes full control of rendering this part of the application.
+  // While Tomo documentation mentions `ssr: true` for Next.js App Router,
+  // this adjustment can be a necessary workaround for specific integration conflicts.
+  ssr: false,
 });
 
-// This component wraps the application to provide the Wagmi context
+const queryClient = new QueryClient(); // Retain QueryClient from your original file
+
+// This component wraps the application to provide the Wagmi and Tomo contexts
 export default function WagmiProviderWrapper({
   children,
 }: {
   children: React.ReactNode;
 }) {
   return (
-    // Provide the configured Wagmi client to the application
+    // Wrap WagmiProvider with QueryClientProvider and TomoEVMKitProvider
     <WagmiProvider config={config}>
-      {children}
+      <QueryClientProvider client={queryClient}>
+        <TomoEVMKitProvider>
+          {children}
+        </TomoEVMKitProvider>
+      </QueryClientProvider>
     </WagmiProvider>
   );
 }

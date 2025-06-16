@@ -377,7 +377,7 @@ export async function POST(request: NextRequest) {
 
           if (royaltyVaultExists) {
             const claimableAmountBigInt: bigint = await storyClient.royalty.claimableRevenue({
-              royaltyVaultIpId: flight.ipId as Address,
+              ipId: flight.ipId as Address,
               claimer: flight.ipId as Address,
               token: WIP_TOKEN_ADDRESS,
             });
