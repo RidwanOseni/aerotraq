@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { toast } from "sonner";
 import { Loader2 } from 'lucide-react';
+import { useTomoWalletServices } from '@/hooks/useTomoWalletServices';
 
 // Define the interface for a FlightRecord, including Story Protocol details for marketplace display
 interface FlightRecordForMarketplace {
@@ -22,6 +23,7 @@ interface FlightRecordForMarketplace {
 
 export default function MarketplacePreviewPage() {
     const { isConnected, address } = useAccount();
+    const { openOnRamp, openSwap } = useTomoWalletServices();
     const [listedFlights, setListedFlights] = useState<FlightRecordForMarketplace[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [simulatingPaymentFlightId, setSimulatingPaymentFlightId] = useState<string | null>(null);
@@ -158,6 +160,25 @@ export default function MarketplacePreviewPage() {
             <Card className="w-full max-w-3xl mx-auto mb-6">
                 <CardHeader>
                     <CardTitle className="text-2xl font-bold">Your Tokenized DGIP Assets (Marketplace Preview)</CardTitle>
+                    <CardDescription className="mb-4">
+                        Need $WIP for royalty payments? Acquire it here seamlessly.
+                    </CardDescription>
+                    <div className="flex gap-4 mb-8">
+                        <Button
+                            onClick={openOnRamp}
+                            disabled={!isConnected}
+                            className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+                        >
+                            Buy $WIP (On-Ramp)
+                        </Button>
+                        <Button
+                            onClick={openSwap}
+                            disabled={!isConnected}
+                            className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white"
+                        >
+                            Swap for $WIP
+                        </Button>
+                    </div>
                     <CardDescription>
                         Demonstrating the commercial value and transactional capabilities of your IP Assets.
                     </CardDescription>
