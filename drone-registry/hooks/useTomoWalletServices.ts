@@ -19,9 +19,30 @@ interface TomoEnhancedProvider {
   // You might extend this with other properties from the base provider if needed for other interactions.
 }
 
+/**
+ * Custom hook for interacting with Tomo Wallet's built-in services
+ * This hook provides a convenient way to access Tomo's native wallet features:
+ * - Swap: For token swaps
+ * - OnRamp: For purchasing crypto with fiat
+ * - Send: For transferring tokens
+ * - Receive: For receiving tokens
+ * 
+ * The hook handles all the necessary checks and error handling for wallet connectivity
+ * and Tomo SDK availability.
+ */
 export const useTomoWalletServices = () => {
   const { connector, isConnected } = useAccount(); // Get isConnected here for a more comprehensive check
 
+  /**
+   * Core function that handles invoking Tomo Wallet services
+   * This function:
+   * 1. Validates wallet connection status
+   * 2. Retrieves and validates the Tomo provider
+   * 3. Safely invokes the requested service through Tomo's SDK
+   * 4. Handles errors and provides user feedback through toast notifications
+   * 
+   * @param type - The type of Tomo service to invoke (SWAP, ONRAMP, SEND, RECEIVE)
+   */
   const invokeTomoService = useCallback(async (type: WebWalletInvokeType) => {
     // Ensure wallet is connected before attempting to get the provider
     if (!isConnected) {
@@ -66,6 +87,7 @@ export const useTomoWalletServices = () => {
     }
   }, [connector, isConnected]); // Added isConnected to dependencies for accurate re-evaluation
 
+  // Convenience functions for each Tomo service
   const openSwap = useCallback(() => {
     invokeTomoService(WebWalletInvokeType.SWAP);
   }, [invokeTomoService]);

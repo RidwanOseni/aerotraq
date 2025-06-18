@@ -6,12 +6,15 @@ import { spawn } from 'child_process';
 import path from 'path';
 import process from 'process';
 
+// Define Story Protocol's Aeneid Testnet chain configuration
+// This configuration is essential for interacting with Story Protocol's testnet and royalty system
+// It includes chain ID, native currency (IP token), RPC URL, and block explorer details
 const aeneid = defineChain({
-  id: 1315,
-  name: 'Story Aeneid Testnet',
+  id: 1315, // Chain ID for Story Protocol's Aeneid Testnet
+  name: 'Story Aeneid Testnet', // Network Name
   nativeCurrency: {
     decimals: 18,
-    name: 'IP',
+    name: 'IP', // Story Protocol's native token
     symbol: 'IP',
   },
   rpcUrls: {
@@ -270,6 +273,9 @@ export async function POST(request: NextRequest) {
 
     if (initialDataHashes.length > 0) {
       try {
+        // Spawn Python process to fetch IP details from Story Protocol
+        // This script handles the communication with Story Protocol's API to get IP-related information
+        // including IPFS CID, IP ID, license terms, and minted token details
         const pythonProcess = spawn(PYTHON_EXECUTABLE, [PYTHON_SCRIPT_PATH]);
         let stdout = '';
         stderr = '';
@@ -367,6 +373,9 @@ export async function POST(request: NextRequest) {
         try {
           let royaltyVaultExists = false;
           try {
+            // Check if a royalty vault exists for this IP
+            // The royalty vault is where revenue from IP licensing is stored
+            // If no vault exists (returns zero address), there won't be any claimable revenue
             const royaltyVaultAddress = await storyClient.royalty.getRoyaltyVaultAddress(flight.ipId as Address);
             if (royaltyVaultAddress !== zeroAddress) {
               royaltyVaultExists = true;
@@ -376,6 +385,9 @@ export async function POST(request: NextRequest) {
           }
 
           if (royaltyVaultExists) {
+            // Calculate the claimable revenue for this IP
+            // This checks how much WIP tokens are available to be claimed from the royalty vault
+            // The amount is returned in wei (18 decimals) and converted to WIP tokens
             const claimableAmountBigInt: bigint = await storyClient.royalty.claimableRevenue({
               ipId: flight.ipId as Address,
               claimer: flight.ipId as Address,

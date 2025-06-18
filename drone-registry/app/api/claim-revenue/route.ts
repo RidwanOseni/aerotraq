@@ -4,6 +4,7 @@ import { storyClient, account } from '../../../lib/storyClient';
 import { Address, zeroAddress } from 'viem';
 
 // Define the $WIP Token Address for Story Protocol Aeneid Testnet
+// This is the native token used for royalty payments in Story Protocol
 
 const WIP_TOKEN_ADDRESS = "0x1514000000000000000000000000000000000000" as Address;
 

@@ -18,6 +18,9 @@ export async function POST(request: NextRequest) {
 
     console.log(`Spawning Python script for IP details retrieval for dataHash: ${dataHash}`);
 
+    // Spawn a Python process to interact with Story Protocol
+    // This script handles the communication with Story Protocol to retrieve IP metadata
+    // including IP ID and license terms ID associated with the given data hash
     const pythonProcess = spawn(PYTHON_EXECUTABLE, [PYTHON_SCRIPT_PATH]);
     let stdout = '';
 
@@ -34,6 +37,9 @@ export async function POST(request: NextRequest) {
     });
 
     // Prepare the input for the Python script
+    // The 'get_story_protocol_details_by_hash' action retrieves Story Protocol metadata
+    // This includes the IP ID (unique identifier for the IP asset) and license terms ID
+    // These details are essential for tracking and managing IP assets on Story Protocol
     const inputData = {
       action: 'get_story_protocol_details_by_hash',
       dataHash: dataHash,

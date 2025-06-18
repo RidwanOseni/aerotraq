@@ -18,8 +18,10 @@ export async function POST(request: NextRequest) {
 
         console.log(`Checking claimable revenue for IP ID: ${ipId} by claimer: ${claimerAddress}`);
 
-        // FIX: Check if a royalty vault exists for this IP ID before attempting to query claimable revenue.
-        // This prevents the SDK from trying to call a function on the zero address if the vault is not deployed.
+        // Check if a royalty vault exists for this IP ID
+        // The royalty vault is a smart contract that holds and distributes revenue from IP licensing
+        // If no vault exists (returns zero address), there won't be any claimable revenue
+        // This check prevents errors when trying to query non-existent vaults
         let royaltyVaultExists = false;
         try {
             const royaltyVaultAddress = await storyClient.royalty.getRoyaltyVaultAddress(ipId as Address);

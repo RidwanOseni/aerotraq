@@ -1,0 +1,7 @@
+aioipfs==0.7.1
+eth_hash
+llama_index
+mcp==1.9.1
+openai==1.81.0
+python-dotenv==1.1.0
+web3==7.11.0

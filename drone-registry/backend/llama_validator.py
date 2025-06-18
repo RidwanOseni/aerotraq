@@ -64,7 +64,12 @@ class FlightDataValidator:
         db_path = os.getenv("DB_PATH", "flight_data.db")
         conn = sqlite3.connect(db_path)
         c = conn.cursor()
-        # Update the schema if needed (e.g., add columns for ip_id and license_terms_id)
+        # Database schema for flight mappings:
+        # - data_hash: Primary key, unique identifier for the flight data
+        # - ipfs_cid: IPFS content identifier where the flight data is stored
+        # - ip_id: Story Protocol IP Asset ID, unique identifier for the IP asset on Story Protocol
+        # - license_terms_id: Story Protocol License Terms ID, links to the licensing terms for this IP
+        # - minted_token_id: Story Protocol NFT token ID, if the IP has been minted as an NFT
         try:
             c.execute('''
                 CREATE TABLE IF NOT EXISTS flight_mappings (
@@ -156,7 +161,15 @@ class FlightDataValidator:
         return self._state.data_hash
 
     def store_flight_data(self, data_hash: str, ipfs_cid: str, ip_id: Optional[str] = None, license_terms_id: Optional[int] = None, minted_token_id: Optional[str] = None) -> None:
-        """Store the mapping between data hash, IPFS CID, IP ID, License Terms ID, and Minted Token ID in the database."""
+        """Store the mapping between data hash, IPFS CID, IP ID, License Terms ID, and Minted Token ID in the database.
+        
+        Args:
+            data_hash: Unique identifier for the flight data
+            ipfs_cid: IPFS content identifier where the flight data is stored
+            ip_id: Story Protocol IP Asset ID, representing the registered IP on Story Protocol
+            license_terms_id: Story Protocol License Terms ID, defining the licensing terms for this IP
+            minted_token_id: Story Protocol NFT token ID, if the IP has been minted as an NFT
+        """
         if not self._db_conn:
             raise RuntimeError("Database connection not initialized")
         c = self._db_conn.cursor()
@@ -188,7 +201,15 @@ class FlightDataValidator:
             self._state.minted_token_id = minted_token_id
 
     def get_flight_data_by_hash(self, data_hash: str) -> Optional[Dict[str, Any]]:
-        """Retrieve flight data including Story Protocol details by data hash."""
+        """Retrieve flight data including Story Protocol details by data hash.
+        
+        Returns a dictionary containing:
+        - dataHash: The unique identifier for the flight data
+        - ipfsCid: IPFS content identifier where the flight data is stored
+        - ipId: Story Protocol IP Asset ID, if the flight has been registered as an IP
+        - licenseTermsId: Story Protocol License Terms ID, if licensing terms have been set
+        - mintedTokenId: Story Protocol NFT token ID, if the IP has been minted as an NFT
+        """
         if not self._db_conn:
             raise RuntimeError("Database connection not initialized")
         c = self._db_conn.cursor()
@@ -205,7 +226,15 @@ class FlightDataValidator:
         return None
 
     def get_flight_data_by_hashes(self, data_hashes: List[str]) -> List[Dict[str, Any]]:
-        """Retrieve flight data including Story Protocol details by a list of data hashes."""
+        """Retrieve flight data including Story Protocol details by a list of data hashes.
+        
+        Returns a list of dictionaries, each containing:
+        - dataHash: The unique identifier for the flight data
+        - ipfsCid: IPFS content identifier where the flight data is stored
+        - ipId: Story Protocol IP Asset ID, if the flight has been registered as an IP
+        - licenseTermsId: Story Protocol License Terms ID, if licensing terms have been set
+        - mintedTokenId: Story Protocol NFT token ID, if the IP has been minted as an NFT
+        """
         if not self._db_conn:
             raise RuntimeError("Database connection not initialized")
         c = self._db_conn.cursor()
@@ -226,7 +255,17 @@ class FlightDataValidator:
         return results
 
     async def update_story_protocol_details(self, data_hash: str, ip_id: str, license_terms_id: int, minted_token_id: str):
-        """Update a flight record with Story Protocol IP ID, License Terms ID, and Minted Token ID."""
+        """Update a flight record with Story Protocol IP details.
+        
+        Args:
+            data_hash: The unique identifier for the flight data
+            ip_id: Story Protocol IP Asset ID, representing the registered IP on Story Protocol
+            license_terms_id: Story Protocol License Terms ID, defining the licensing terms for this IP
+            minted_token_id: Story Protocol NFT token ID, if the IP has been minted as an NFT
+            
+        This function updates the Story Protocol-related fields in the database for an existing flight record.
+        These fields are essential for tracking the IP asset's status on Story Protocol and managing its licensing.
+        """
         print(f"Attempting to update flight record {data_hash} with IP ID {ip_id}, License Terms ID {license_terms_id}, and Minted Token ID {minted_token_id}", file=sys.stderr)
         if not self._db_conn:
             self._db_conn = self._init_db()

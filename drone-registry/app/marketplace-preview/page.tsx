@@ -8,6 +8,13 @@ import { toast } from "sonner";
 import { Loader2 } from 'lucide-react';
 import { useTomoWalletServices } from '@/hooks/useTomoWalletServices';
 
+// The useTomoWalletServices hook provides integration with Tomo's wallet services,
+// enabling two key functionalities:
+// 1. openOnRamp: Allows users to purchase $WIP tokens directly through Tomo's on-ramp service
+// 2. openSwap: Enables users to swap other tokens for $WIP using Tomo's swap interface
+// These services are essential for users to acquire $WIP tokens needed for royalty payments
+// and marketplace transactions in the DGIP ecosystem.
+
 // Define the interface for a FlightRecord, including Story Protocol details for marketplace display
 interface FlightRecordForMarketplace {
     initialDataHash: string;
@@ -52,7 +59,12 @@ export default function MarketplacePreviewPage() {
                 const result = await response.json();
 
                 if (result.status === 'success' && Array.isArray(result.flights)) {
-                    // Filter to only show flights that have been tokenized (have an ipId and mintedTokenId)
+                    // Filter flights to only show those that have been fully tokenized on Story Protocol
+                    // This ensures we only display IP assets that have:
+                    // 1. An IP ID (registered on Story Protocol)
+                    // 2. License Terms ID (licensing terms attached)
+                    // 3. Minted Token ID (NFT minted)
+                    // These are the minimum requirements for an IP asset to be monetized on Story Protocol
                     const tokenizedFlights = result.flights.filter(
                         (flight: any) => flight.ipId && flight.licenseTermsId !== null && flight.mintedTokenId
                     ).map((flight: any) => ({
@@ -94,7 +106,12 @@ export default function MarketplacePreviewPage() {
         // Removed setTimeout to make the 'isListed' status persist until explicitly unlisted (if unlisting is implemented later).
     };
 
-    // Royalty Simulation Functionality (moved from flight-history)
+    // Simulate royalty payment for a Story Protocol IP asset
+    // This function demonstrates how IP assets can generate revenue through Story Protocol's royalty system
+    // It requires both the IP Asset ID and License Terms ID to:
+    // 1. Identify the specific IP asset
+    // 2. Apply the correct licensing terms for revenue distribution
+    // The simulation shows how IP owners can earn royalties when their IP is licensed
     const handleSimulateRoyalty = async (ipAssetId: string, licenseTermsId: number) => {
         if (!ipAssetId || licenseTermsId === null || typeof licenseTermsId === 'undefined') {
             toast.error("IP Asset ID or License Terms ID is missing for this flight. Please ensure it was tokenized.");
@@ -217,6 +234,12 @@ export default function MarketplacePreviewPage() {
                                         </a>
                                     </p>
                                 )}
+                                {/* Display Story Protocol metadata for each IP asset
+                                    These details are crucial for:
+                                    1. IP Asset ID: Unique identifier on Story Protocol, used for royalty tracking
+                                    2. License Terms ID: Links to the licensing terms that define revenue sharing
+                                    3. Minted Token ID: Represents the NFT ownership of the IP asset
+                                    All these fields are required for the IP asset to be monetized */}
                                 <p className="font-semibold">Story Protocol Details:</p>
                                 <p>
                                     IP Asset ID:{" "}

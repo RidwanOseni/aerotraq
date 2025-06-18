@@ -230,6 +230,11 @@ export default function RevenuePage() {
     }, [isConnected, address, config]);
 
     const handleClaimRevenue = async (flightId: number, ipId: string) => {
+        // Function to claim accrued royalties from Story Protocol's royalty vault
+        // This is triggered when an IP owner wants to withdraw their earned revenue
+        // The function requires:
+        // 1. flightId: To identify the specific flight record
+        // 2. ipId: The Story Protocol IP Asset ID that holds the royalty vault
         if (!ipId || !address) {
             toast.error("IP Asset ID or wallet address is missing. Cannot claim revenue.");
             return;
@@ -341,6 +346,12 @@ export default function RevenuePage() {
                                 <Card key={flight.flightId} className="p-4">
                                     <CardTitle className="text-xl">Flight ID: {flight.flightId}</CardTitle>
                                     <CardContent className="mt-2 text-sm space-y-1">
+                                        {/* Display Story Protocol IP Asset details
+                                            These fields are essential for tracking and managing IP revenue:
+                                            1. IP Asset ID: Links to the Story Protocol IP asset and its royalty vault
+                                            2. License Terms ID: Shows the licensing terms attached to this IP
+                                            3. Minted Token ID: Indicates if the IP has been minted as an NFT
+                                            4. Claimable Revenue: Shows the amount of WIP tokens available to claim */}
                                         {flight.ipId && (
                                             <p>
                                                 <span className="font-semibold">IP Asset ID:</span>{" "}

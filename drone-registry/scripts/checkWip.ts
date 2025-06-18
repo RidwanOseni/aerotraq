@@ -1,4 +1,4 @@
-// Replace the original import line with this:
+// Import Story Protocol client for interacting with $WIP token
 import * as storyModule from '../lib/storyClient.js';
 // Note the '.js' extension is crucial for explicit specifier resolution.
 
@@ -10,6 +10,7 @@ async function checkWipBalance() {
     console.log(`Starting $WIP balance check for ${walletAddress}...`); // Added log
 
     try {
+         // Use Story Protocol's wipClient to check $WIP token balance
         console.log("Attempting to fetch balance from storyClient.wipClient..."); // Added log
         const wipBalance = await storyModule.storyClient.wipClient.balanceOf(walletAddress);
         console.log("Successfully fetched WIP balance."); // Added log

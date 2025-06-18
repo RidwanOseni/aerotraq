@@ -1,6 +1,10 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+// The Providers component wraps the application with essential contexts:
+// - WagmiProvider: Enables Web3 wallet interactions and blockchain connectivity
+// - TomoProvider: Integrates Tomo's EVM Kit for enhanced wallet features and services
+// This ensures all components have access to both Wagmi and Tomo functionality
 import Providers from "./WagmiProviderWrapper"; // Ensure this path correctly points to your WagmiProviderWrapper.tsx
 import Navbar from "@/components/navbar";
 import { Toaster } from "@/components/ui/sonner";

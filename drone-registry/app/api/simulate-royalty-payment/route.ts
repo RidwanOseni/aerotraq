@@ -2,15 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { storyClient, account } from '../../../lib/storyClient'; // MODIFIED LINE: Imported 'account'
 import { Address, parseEther, zeroAddress } from 'viem';
 
-// Define the $WIP Token Address for Story Protocol Aeneid Testnet.
-// This address is standard for Story Protocol's testnet.
-const WIP_TOKEN_ADDRESS = "0x1514000000000000000000000000000000000000" as Address; // [3]
+// Define the $WIP Token Address for Story Protocol Aeneid Testnet
+// This is the native token used for royalty payments on Story Protocol's testnet
+const WIP_TOKEN_ADDRESS = "0x1514000000000000000000000000000000000000" as Address;
 
 export async function POST(request: NextRequest) {
   try {
-    // This route expects to receive the IP Asset ID (ipId) of User A's DGIP
-    // and the License Terms ID (licenseTermsId) from the frontend.
-    const { ipId, licenseTermsId } = await request.json(); // [4]
+    // Step 1: Input Validation
+    // The API expects two critical pieces of information:
+    // - ipId: The Story Protocol IP Asset ID that will receive the royalty payment
+    // - licenseTermsId: The ID of the licensing terms that govern this IP's revenue sharing
+    const { ipId, licenseTermsId } = await request.json();
 
     // Basic validation for the incoming IP ID
     if (!ipId || typeof ipId !== 'string' || !ipId.startsWith('0x')) {
@@ -19,83 +21,90 @@ export async function POST(request: NextRequest) {
 
     // Validate licenseTermsId as well
     if (licenseTermsId === null || typeof licenseTermsId !== 'number' || licenseTermsId < 0) {
-      return NextResponse.json({ error: 'Invalid or missing License Terms ID.' }, { status: 400 }); // [5]
+      return NextResponse.json({ error: 'Invalid or missing License Terms ID.' }, { status: 400 });
     }
 
-    console.log(`Initiating royalty payment simulation for IP ID: ${ipId}`); // [5]
+    console.log(`Initiating royalty payment simulation for IP ID: ${ipId}`);
 
-    // Fix for RoyaltyModule__ZeroReceiverVault() error:
-    // Ensure the royalty vault is deployed by attempting to mint a license token
-    // for the IP Asset if a vault is not yet associated.
+    // Step 2: Royalty Vault Verification
+    // Before making a royalty payment, we need to ensure a royalty vault exists
+    // The vault is a smart contract that holds and distributes royalty payments
     let royaltyVaultAddress: Address = zeroAddress;
     try {
-      royaltyVaultAddress = await storyClient.royalty.getRoyaltyVaultAddress(ipId as Address); // [5]
-      console.log(`Current Royalty Vault Address for ${ipId}: ${royaltyVaultAddress}`); // [5]
+      // Check if a royalty vault already exists for this IP
+      royaltyVaultAddress = await storyClient.royalty.getRoyaltyVaultAddress(ipId as Address);
+      console.log(`Current Royalty Vault Address for ${ipId}: ${royaltyVaultAddress}`);
     } catch (vaultCheckError) {
-      // Log the warning but don't stop here, as vault might just not be deployed yet.
-      console.warn(`Could not retrieve royalty vault address initially: ${vaultCheckError}`); // [6]
+      console.warn(`Could not retrieve royalty vault address initially: ${vaultCheckError}`);
     }
 
+    // Step 3: Royalty Vault Deployment (if needed)
+    // If no vault exists, we need to trigger its deployment by minting a license token
+    // This is a requirement of Story Protocol's architecture
     if (royaltyVaultAddress === zeroAddress) {
-      console.log(`Royalty vault not found for IP ID ${ipId}. Attempting to mint a license token to trigger vault deployment...`); // [6]
+      console.log(`Royalty vault not found for IP ID ${ipId}. Attempting to mint a license token to trigger vault deployment...`);
 
       try {
+        // Mint a license token to trigger vault deployment
+        // This is a prerequisite for receiving royalty payments
         const mintLicenseResponse = await storyClient.license.mintLicenseTokens({
-          licensorIpId: ipId as Address, // [6]
-          licenseTermsId: licenseTermsId, // [6]
-          amount: 1, // Mint 1 license token to trigger vault deployment [6]
+          licensorIpId: ipId as Address, // The IP asset that will receive royalties
+          licenseTermsId: licenseTermsId, // The terms governing revenue sharing
+          amount: 1, // Mint one license token to trigger vault deployment
           maxMintingFee: 0n,
-          maxRevenueShare: 100, // [7]
-          // FIX: Use the storyClient's own account address as the receiver
-          receiver: account.address, // MODIFIED LINE: Changed to 'account.address'
-          txOptions: { waitForTransaction: true }, // [7]
+          maxRevenueShare: 100, // Maximum revenue share percentage
+          receiver: account.address, // The address that will hold the license token
+          txOptions: { waitForTransaction: true },
         });
 
-        console.log(`Successfully minted license token. Transaction Hash: ${mintLicenseResponse.txHash}`); // [7]
+        console.log(`Successfully minted license token. Transaction Hash: ${mintLicenseResponse.txHash}`);
 
-        // Re-check the vault address after minting to confirm deployment (optional but good practice)
-        royaltyVaultAddress = await storyClient.royalty.getRoyaltyVaultAddress(ipId as Address); // [7]
+        // Verify vault deployment after minting
+        royaltyVaultAddress = await storyClient.royalty.getRoyaltyVaultAddress(ipId as Address);
         if (royaltyVaultAddress === zeroAddress) {
-          throw new Error("Vault still not deployed after attempting to mint license token. Royalty payment will likely fail."); // [8]
+          throw new Error("Vault still not deployed after attempting to mint license token. Royalty payment will likely fail.");
         }
-        console.log(`Royalty vault successfully deployed/found at: ${royaltyVaultAddress}`); // [8]
+        console.log(`Royalty vault successfully deployed/found at: ${royaltyVaultAddress}`);
 
       } catch (mintError: any) {
-        console.error(`Failed to mint license token to deploy royalty vault: ${mintError.message}`); // [8]
+        console.error(`Failed to mint license token to deploy royalty vault: ${mintError.message}`);
         return NextResponse.json({
           status: 'error',
-          message: `Failed to prepare IP for royalty payment (minting license token failed): ${mintError.message}` // [8]
-        }, { status: 500 }); // [9]
+          message: `Failed to prepare IP for royalty payment (minting license token failed): ${mintError.message}`
+        }, { status: 500 });
       }
     } else {
-      console.log(`Royalty vault already exists for IP ID ${ipId}. Proceeding with payment.`); // [9]
+      console.log(`Royalty vault already exists for IP ID ${ipId}. Proceeding with payment.`);
     }
 
-    // --- Trigger Royalty Payment using Story Protocol SDK ---
-    const paymentAmount = parseEther("0.1"); // Simulate a fixed payment of 0.1 $WIP [9]
+    // Step 4: Simulate Royalty Payment
+    // Using Story Protocol's SDK to simulate a royalty payment
+    // This demonstrates how IP owners can earn revenue from their assets
+    const paymentAmount = parseEther("0.1"); // Simulate a payment of 0.1 $WIP tokens
     const payRoyaltyResponse = await storyClient.royalty.payRoyaltyOnBehalf({
-      receiverIpId: ipId as Address, // This is User A's IP Asset ID, receiving the royalty [9]
-      payerIpId: zeroAddress, // Represents an external payer (User B) in this simulation [9]
-      token: WIP_TOKEN_ADDRESS, // The currency token for the payment, which is $WIP [10]
-      amount: paymentAmount, // The amount of $WIP tokens to pay [10]
-      txOptions: { waitForTransaction: true }, // Wait for the transaction to be mined for confirmation [10]
+      receiverIpId: ipId as Address, // The IP asset receiving the royalty payment
+      payerIpId: zeroAddress, // In this simulation, we're using a zero address as the payer
+      token: WIP_TOKEN_ADDRESS, // The $WIP token used for the payment
+      amount: paymentAmount, // The amount of $WIP tokens to pay
+      txOptions: { waitForTransaction: true }, // Wait for transaction confirmation
     });
 
-    console.log(`Royalty payment transaction sent. Transaction Hash: ${payRoyaltyResponse.txHash}`); // [10]
+    console.log(`Royalty payment transaction sent. Transaction Hash: ${payRoyaltyResponse.txHash}`);
 
-    // Return a success response to the frontend with the transaction hash
+    // Step 5: Return Success Response
+    // Provide the transaction details to the frontend for confirmation
     return NextResponse.json({
       status: 'success',
-      message: `Royalty payment simulated successfully for IP ID: ${ipId}`, // [10]
-      txHash: payRoyaltyResponse.txHash, // [11]
+      message: `Royalty payment simulated successfully for IP ID: ${ipId}`,
+      txHash: payRoyaltyResponse.txHash,
     });
 
   } catch (error: any) {
-    // Handle any errors that occur during the API call or Story Protocol interaction
-    console.error("Error in simulate-royalty-payment API route:", error); // [11]
+    // Handle any errors that occur during the process
+    console.error("Error in simulate-royalty-payment API route:", error);
     return NextResponse.json({
       status: 'error',
-      message: error.message || "An unexpected error occurred during royalty payment simulation." // [11]
-    }, { status: 500 }); // [11]
+      message: error.message || "An unexpected error occurred during royalty payment simulation."
+    }, { status: 500 });
   }
 }

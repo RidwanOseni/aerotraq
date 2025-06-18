@@ -27,8 +27,14 @@ import { useAccount, useDisconnect } from "wagmi";
 
 import { useConnectModal } from "@tomo-inc/tomo-evm-kit";
 
-// Corrected the type definition for navItems' icon property to be React.ElementType
-// This interface is likely for the MobileMenu component, not Navbar itself.
+// The useConnectModal hook from Tomo's EVM Kit provides a seamless wallet connection experience:
+// - Integrates Tomo's user-friendly wallet connection modal
+// - Handles multiple wallet providers and connection states
+// - Provides a consistent connection experience across the application
+// The openConnectModal function is used in the "Connect Wallet" button to trigger
+// Tomo's standardized connection flow, ensuring a smooth onboarding process for users.
+
+
 interface MobileMenuProps {
   navItems: {
     name: string;
