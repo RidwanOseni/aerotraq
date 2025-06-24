@@ -127,7 +127,7 @@ export default function FlightHistoryPage() {
                                         {flight.droneName} Flight on {flight.flightDate}
                                     </CardTitle>
                                     <CardContent className="mt-2 text-sm space-y-1">
-                                        <p><span className="font-semibold">Data Hash:</span> {flight.initialDataHash}</p>
+                                        <p><span className="font-semibold">Data Hash:</span> <span className="break-all">{flight.initialDataHash}</span></p>
                                         {flight.ipfsCid && flight.ipfsCid !== "UPLOAD_FAILED" && (
                                             <p>
                                                 <span className="font-semibold">IPFS CID:</span>{" "}
@@ -137,7 +137,7 @@ export default function FlightHistoryPage() {
                                                     rel="noopener noreferrer"
                                                     className="text-blue-500 hover:underline"
                                                 >
-                                                    {flight.ipfsCid}
+                                                    {flight.ipfsCid.length > 14 ? `${flight.ipfsCid.substring(0, 8)}...${flight.ipfsCid.slice(-6)}` : flight.ipfsCid}
                                                 </a>
                                             </p>
                                         )}
