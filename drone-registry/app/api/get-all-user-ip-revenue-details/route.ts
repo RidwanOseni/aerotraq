@@ -232,7 +232,7 @@ export async function POST(request: NextRequest) {
 
     const initialDataHashes: string[] = [];
     const flightIdToDataHashMap = new Map();
-    const flightDetailsMap = new Map();
+    const flightDetailsMap = new Map<string, FlightRecordWithRevenue>();
 
     for (const flightIdBigInt of userFlightIdsBigInt) {
       const flightId = Number(flightIdBigInt);
@@ -253,7 +253,7 @@ export async function POST(request: NextRequest) {
           ipId: null,
           licenseTermsId: null,
           mintedTokenId: null,
-          claimableAmount: null,
+          claimableAmount: "0 WIP",
           droneName: 'Loading...',
           flightDate: 'Loading...',
         });
@@ -273,14 +273,10 @@ export async function POST(request: NextRequest) {
 
     if (initialDataHashes.length > 0) {
       try {
-        // Spawn Python process to fetch IP details from Story Protocol
-        // This script handles the communication with Story Protocol's API to get IP-related information
-        // including IPFS CID, IP ID, license terms, and minted token details
         const pythonProcess = spawn(PYTHON_EXECUTABLE, [PYTHON_SCRIPT_PATH]);
         let stdout = '';
         stderr = '';
 
-        // FIX 2: Corrected syntax for 'data' parameter typing
         pythonProcess.stdout.on('data', (data: Buffer) => { stdout += data.toString(); });
         pythonProcess.stderr.on('data', (data: Buffer) => { stderr += data.toString(); });
 
@@ -315,98 +311,112 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const finalFlights: FlightRecordWithRevenue[] = [];
-
-    for (const [dataHash, flight] of flightDetailsMap.entries()) {
-      const ipDetail = allIpDetails.find(detail => detail.dataHash === dataHash);
-      if (ipDetail) {
-        flight.ipfsCid = ipDetail.ipfsCid;
-        flight.ipId = ipDetail.ipId;
-        flight.licenseTermsId = ipDetail.licenseTermsId;
-        flight.mintedTokenId = ipDetail.mintedTokenId;
-      }
-
-      if (flight.ipfsCid && flight.ipfsCid !== "UPLOAD_FAILED") {
-        try {
-          const pythonProcess = spawn(PYTHON_EXECUTABLE, [PYTHON_SCRIPT_PATH]);
-          let stdoutIpfs = '';
-          let stderrIpfs = '';
-
-          // FIX 2: Corrected syntax for 'data' parameter typing
-          pythonProcess.stdout.on('data', (data: Buffer) => { stdoutIpfs += data.toString(); });
-          pythonProcess.stderr.on('data', (data: Buffer) => { stderrIpfs += data.toString(); });
-
-          const inputDataIpfs = {
-            action: 'get_ipfs_content_by_cid',
-            ipfsCid: flight.ipfsCid,
-          };
-
-          pythonProcess.stdin.write(JSON.stringify(inputDataIpfs));
-          pythonProcess.stdin.end();
-
-          const exitCodeIpfs = await new Promise((resolve) => {
-            pythonProcess.on('close', resolve);
-          });
-
-          if (exitCodeIpfs !== 0) {
-            console.error(`Python script for IPFS content exited with code ${exitCodeIpfs}. Stderr: ${stderrIpfs || 'None'}`);
-          } else {
-            const parsedIpfsOutput = JSON.parse(stdoutIpfs);
-            if (parsedIpfsOutput.status === 'success' && parsedIpfsOutput.content && parsedIpfsOutput.content.flight_data) {
-              flight.droneName = parsedIpfsOutput.content.flight_data.droneName;
-              flight.flightDate = parsedIpfsOutput.content.flight_data.flightDate;
-            } else {
-              console.warn(`Unexpected IPFS content format for CID ${flight.ipfsCid}:`, parsedIpfsOutput);
-            }
-          }
-        } catch (ipfsError: any) {
-          console.error(`Error fetching IPFS content for CID ${flight.ipfsCid}:`, ipfsError.message);
-          flight.droneName = 'Error';
-          flight.flightDate = 'Error';
+    for (const ipDetail of allIpDetails) {
+        const flight = flightDetailsMap.get(ipDetail.dataHash);
+        if (flight) {
+            flight.ipfsCid = ipDetail.ipfsCid;
+            flight.ipId = ipDetail.ipId;
+            flight.licenseTermsId = ipDetail.licenseTermsId;
+            flight.mintedTokenId = ipDetail.mintedTokenId;
         }
-      } else {
-        flight.droneName = 'N/A';
-        flight.flightDate = 'N/A';
-      }
-
-      if (flight.ipId) {
-        try {
-          let royaltyVaultExists = false;
-          try {
-            // Check if a royalty vault exists for this IP
-            // The royalty vault is where revenue from IP licensing is stored
-            // If no vault exists (returns zero address), there won't be any claimable revenue
-            const royaltyVaultAddress = await storyClient.royalty.getRoyaltyVaultAddress(flight.ipId as Address);
-            if (royaltyVaultAddress !== zeroAddress) {
-              royaltyVaultExists = true;
-            }
-          } catch (vaultCheckError: any) {
-            console.warn(`Warning: Could not retrieve royalty vault address for IP ID ${flight.ipId}. Assuming no vault exists for claimable revenue check. Error: ${vaultCheckError.message}`);
-          }
-
-          if (royaltyVaultExists) {
-            // Calculate the claimable revenue for this IP
-            // This checks how much WIP tokens are available to be claimed from the royalty vault
-            // The amount is returned in wei (18 decimals) and converted to WIP tokens
-            const claimableAmountBigInt: bigint = await storyClient.royalty.claimableRevenue({
-              ipId: flight.ipId as Address,
-              claimer: flight.ipId as Address,
-              token: WIP_TOKEN_ADDRESS,
-            });
-            flight.claimableAmount = `${parseFloat(claimableAmountBigInt.toString()) / (10**18)} WIP`;
-          } else {
-            console.log(`No active royalty vault found for IP ID ${flight.ipId}. Claimable amount is 0.`);
-            flight.claimableAmount = "0 WIP";
-          }
-        } catch (claimableError: any) {
-          console.warn(`Failed to fetch claimable revenue for IP ID ${flight.ipId}: ${claimableError.message}`);
-          flight.claimableAmount = "0 WIP";
-        }
-      } else {
-        flight.claimableAmount = "0 WIP";
-      }
-      finalFlights.push(flight);
     }
+
+    const cidsToFetch: string[] = [];
+    for (const flight of flightDetailsMap.values()) {
+        if (flight.ipfsCid && flight.ipfsCid !== "UPLOAD_FAILED" && flight.ipfsCid !== null) {
+            cidsToFetch.push(flight.ipfsCid);
+        }
+    }
+
+    let allIpfsContents: { ipfsCid: string; content: any; error: string | null }[] = [];
+    if (cidsToFetch.length > 0) {
+        try {
+            const pythonProcessIpfs = spawn(PYTHON_EXECUTABLE, [PYTHON_SCRIPT_PATH]);
+            let stdoutIpfs = '';
+            let stderrIpfs = '';
+            pythonProcessIpfs.stdout.on('data', (data: Buffer) => { stdoutIpfs += data.toString(); });
+            pythonProcessIpfs.stderr.on('data', (data: Buffer) => { stderrIpfs += data.toString(); });
+
+            const inputDataIpfs = {
+                action: 'get_ipfs_content_by_cids',
+                ipfsCids: cidsToFetch,
+            };
+            pythonProcessIpfs.stdin.write(JSON.stringify(inputDataIpfs));
+            pythonProcessIpfs.stdin.end();
+
+            const exitCodeIpfs = await new Promise((resolve) => {
+                pythonProcessIpfs.on('close', resolve);
+            });
+
+            if (exitCodeIpfs !== 0) {
+                console.error(`Python script for IPFS content exited with code ${exitCodeIpfs}. Stderr: ${stderrIpfs || 'None'}`);
+            } else {
+                const parsedIpfsOutput = JSON.parse(stdoutIpfs);
+                if (parsedIpfsOutput.status === 'success' && Array.isArray(parsedIpfsOutput.contents)) {
+                    allIpfsContents = parsedIpfsOutput.contents;
+                } else {
+                    console.warn(`Unexpected IPFS content batch format:`, parsedIpfsOutput);
+                }
+            }
+        } catch (ipfsBatchError: any) {
+            console.error(`Error fetching IPFS content in batch:`, ipfsBatchError.message);
+        }
+    }
+
+    const ipfsContentMap = new Map<string, any>();
+    for (const item of allIpfsContents) {
+        if (item.content && item.content.flight_data) {
+            ipfsContentMap.set(item.ipfsCid, item.content.flight_data);
+        }
+    }
+
+    for (const flight of flightDetailsMap.values()) {
+        if (flight.ipfsCid && ipfsContentMap.has(flight.ipfsCid)) {
+            const flightDataFromIpfs = ipfsContentMap.get(flight.ipfsCid);
+            flight.droneName = flightDataFromIpfs.droneName;
+            flight.flightDate = flightDataFromIpfs.flightDate;
+        } else {
+            flight.droneName = flight.ipfsCid === "UPLOAD_FAILED" ? 'Upload Failed' : 'N/A';
+            flight.flightDate = flight.ipfsCid === "UPLOAD_FAILED" ? 'N/A' : 'N/A';
+        }
+    }
+
+    const revenueCheckPromises: Promise<void>[] = [];
+    const flightsToProcessRevenue = Array.from(flightDetailsMap.values()).filter(flight => flight.ipId);
+
+    for (const flight of flightsToProcessRevenue) {
+        revenueCheckPromises.push((async () => {
+            try {
+                let royaltyVaultExists = false;
+                try {
+                    const royaltyVaultAddress = await storyClient.royalty.getRoyaltyVaultAddress(flight.ipId as Address);
+                    if (royaltyVaultAddress !== zeroAddress) {
+                        royaltyVaultExists = true;
+                    }
+                } catch (vaultCheckError: any) {
+                    console.warn(`Warning: Could not retrieve royalty vault address for IP ID ${flight.ipId}. Error: ${vaultCheckError.message}`);
+                }
+
+                if (royaltyVaultExists) {
+                    const claimableAmountBigInt: bigint = await storyClient.royalty.claimableRevenue({
+                        ipId: flight.ipId as Address,
+                        claimer: claimerAddress as Address,
+                        token: WIP_TOKEN_ADDRESS,
+                    });
+                    flight.claimableAmount = `${parseFloat(claimableAmountBigInt.toString()) / (10**18)} WIP`;
+                } else {
+                    flight.claimableAmount = "0 WIP";
+                }
+            } catch (claimableError: any) {
+                console.warn(`Failed to fetch claimable revenue for IP ID ${flight.ipId}: ${claimableError.message}`);
+                flight.claimableAmount = "0 WIP";
+            }
+        })());
+    }
+
+    await Promise.all(revenueCheckPromises);
+
+    const finalFlights: FlightRecordWithRevenue[] = Array.from(flightDetailsMap.values());
 
     return NextResponse.json({
       status: 'success',

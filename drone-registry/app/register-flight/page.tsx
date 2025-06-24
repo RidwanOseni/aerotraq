@@ -46,10 +46,6 @@ interface ValidationResult {
     raw_validation_data?: any;
 }
 
-// Removed local DgipLogEntry and DgipSimulationDisplayProps interfaces [new-error.txt, 328-339]
-
-// Removed local ComplianceSuggestionsProps interface [new-error.txt, 329]
-
 // Contract address and ABI for the DroneFlight contract
 const contractAddress = "0x4f3880A15Ea6f0E1A269c59e44855a9963B86949"; // [ABI-smart-contract-new.txt, 9]
 const contractABI = [

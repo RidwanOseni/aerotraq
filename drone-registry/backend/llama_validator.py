@@ -580,6 +580,41 @@ class FlightDataValidator:
                 except Exception as cleanup_error:
                     print(f"Error during MCP client cleanup: {cleanup_error}", file=sys.stderr)
 
+    # --- ADD: Batch IPFS content fetcher ---
+    async def get_ipfs_content_by_cids(self, ipfs_cids: List[str]) -> List[Dict[str, Any]]:
+        """Fetches content from IPFS for multiple CIDs and parses them as JSON."""
+        print(f"Attempting to fetch content from IPFS for CIDs: {len(ipfs_cids)} items", file=sys.stderr)
+        results = []
+        ipfs_client = aioipfs.AsyncIPFS()
+        async with ipfs_client:
+            tasks = []
+            for cid in ipfs_cids:
+                # Create a task for each IPFS fetch, handling potential errors individually
+                tasks.append(self._fetch_single_ipfs_content(ipfs_client, cid))
+            # Run all tasks concurrently
+            # return_exceptions=True allows Promise.all to succeed even if some individual fetches fail
+            raw_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            for i, res in enumerate(raw_results):
+                cid = ipfs_cids[i]
+                if isinstance(res, Exception):
+                    print(f"Error fetching IPFS content for CID {cid}: {res}", file=sys.stderr)
+                    results.append({"ipfsCid": cid, "content": None, "error": str(res)})
+                else:
+                    results.append({"ipfsCid": cid, "content": res, "error": None})
+        return results
+
+    async def _fetch_single_ipfs_content(self, ipfs_client, ipfs_cid: str) -> Optional[Dict[str, Any]]:
+        """Helper to fetch and parse a single IPFS CID."""
+        try:
+            data_bytes = await ipfs_client.core.cat(ipfs_cid)
+            data_string = data_bytes.decode('utf-8')
+            parsed_data = json.loads(data_string)
+            return parsed_data
+        except Exception as e:
+            # Re-raise to be caught by asyncio.gather, so we know which CID failed
+            raise ValueError(f"Failed to fetch or parse {ipfs_cid}: {e}")
+
     async def main(self):
         """Main entry point for the script. Handles different actions based on input."""
         print("Script started.", file=sys.stderr)
@@ -636,6 +671,14 @@ class FlightDataValidator:
                     print(json.dumps({"status": "success", "content": ipfs_content}))
                 else:
                     print(json.dumps({"status": "error", "message": f"Failed to retrieve content for IPFS CID: {ipfs_cid}"}))
+
+            # --- ADD: Batch IPFS content fetch handler ---
+            elif action == "get_ipfs_content_by_cids":
+                ipfs_cids = parsed_input.get("ipfsCids")
+                if not ipfs_cids or not isinstance(ipfs_cids, list):
+                    raise ValueError("Missing or invalid ipfsCids for get_ipfs_content_by_cids action.")
+                ipfs_contents_results = await self.get_ipfs_content_by_cids(ipfs_cids)
+                print(json.dumps({"status": "success", "contents": ipfs_contents_results}))
 
             else:
                 flight_data = parsed_input

@@ -136,7 +136,7 @@ export default function FlightHistoryPage() {
                                                 <p>
                                                     <span className="font-semibold">IP Asset ID:</span>{" "}
                                                     <a
-                                                        href={`https://aeneid.explorer.story.foundation/ip/${flight.ipId}`}
+                                                        href={`https://aeneid.storyscan.io/address/${flight.ipId}`}
                                                         target="_blank"
                                                         rel="noopener noreferrer"
                                                         className="text-blue-500 hover:underline"
