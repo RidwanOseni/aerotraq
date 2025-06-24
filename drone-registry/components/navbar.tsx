@@ -115,6 +115,7 @@ export default function Navbar() {
       {/* Desktop Navigation */}
       <div className="flex justify-between items-center px-6 py-4 bg-background shadow-sm" ref={dropdownContainerRef}> {/* Add ref to container for click outside */}
         <Link href="/" className="text-xl font-bold text-foreground">
+        <img src="/aerotraq-logo.svg" alt="Aerotraq Logo" className="h-9 w-auto" />
           Drone Registry
         </Link>
         <nav className="flex items-center space-x-4">
